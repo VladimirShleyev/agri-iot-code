@@ -20,7 +20,7 @@ script_dir=$(dirname "$actual_path")
 log_file="${script_dir}/weather.log"
 # If you want to do it without following any symlinks, then try using realpath with option -s:
 # http://stackoverflow.com/questions/6643853/how-to-convert-in-path-names-to-absolute-name-in-a-bash-script
-data_file=$(realpath -sm "${script_dir}/../data/weather.txt")
+data_file=$(realpath -sm "${script_dir}/../data/weather_history.txt")
 
 echo "log file name = " ${log_file}
 echo "data file name = " ${data_file}
@@ -36,13 +36,15 @@ cd $(dirname ${data_file})
 git config user.name "iot-rus"
 git config user.email "ilya.tsas@gmail.com"
 git config credential.helper "cache --timeout=9999999"
+# New git push mode "simple" from  git v1.7.11 release notes
+# git config --global push.default simple
 echo "Запровижинены параметры GIT"
 
-git add weather.txt
+git add weather_history.txt
 echo "Выполнена команда GIT ADD"
 
 cmessage="Добавлены данные о текущей погоде: $(date)"
 git commit -m "${cmessage}"
 echo "Выполнена команда GIT COMMIT"
-git push --repo https://iot-rus@github.com/iot-rus/agri-iot-data.git
+git push --repo git@github.com:iot-rus/agri-iot-data.git
 echo "Выполнена команда GIT PUSH"
