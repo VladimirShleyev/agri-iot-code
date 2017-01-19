@@ -44,5 +44,5 @@ echo "Выполнена команда GIT ADD"
 cmessage="Добавлены данные о текущей погоде: $(date)"
 git commit -m "${cmessage}"
 echo "Выполнена команда GIT COMMIT"
-git push --repo https://iot-rus@github.com/iot-rus/agri-iot-data
+git push --repo https://iot-rus@github.com/iot-rus/agri-iot-data.git
 echo "Выполнена команда GIT PUSH"
