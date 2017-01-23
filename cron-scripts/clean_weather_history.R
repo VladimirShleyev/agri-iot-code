@@ -12,11 +12,9 @@ library(tools) # для работы с именами файлов
 
 
 # To emulate the command line input I would use with Rscript, I entered this in RStudio:
-commandArgs <- function(trailingOnly=TRUE) c("D:/iwork.GH/agri-IoT/data/weather_history.txt")
+#commandArgs <- function(trailingOnly=TRUE) c("D:/iwork.GH/agri-IoT/data/weather_history.txt")
+args <- commandArgs(trailingOnly=TRUE)
 
-
-
-# args <- commandArgs(trailingOnly=TRUE)
 print(args)
 
 ifname <- args[1]
