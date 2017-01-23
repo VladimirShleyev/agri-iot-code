@@ -21,6 +21,7 @@ log_file="${script_dir}/request_weather.log"
 # If you want to do it without following any symlinks, then try using realpath with option -s:
 # http://stackoverflow.com/questions/6643853/how-to-convert-in-path-names-to-absolute-name-in-a-bash-script
 data_file=$(realpath -sm "${script_dir}/../data/weather_history.txt")
+R_file=$(realpath -sm "${script_dir}/clean_weather_history.R")
 
 echo "log file name = " ${log_file}
 echo "data file name = " ${data_file}
@@ -29,6 +30,10 @@ echo $WEATHER >> $log_file
 echo $WEATHER >> $data_file
 
 cat $log_file | grep "coord" | grep -v failed > $data_file
+
+# А теперь вызываем R скрипт для очистки данных
+
+Rscript $R_file $data_file
 
 #Работа с GIT
 cd $(dirname ${data_file})

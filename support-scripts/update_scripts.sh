@@ -15,11 +15,11 @@ script_list=(
 )
 
 #Loop
-for name in "${script_list[@]}"
+for script_name in "${script_list[@]}"
 do
-    echo "$name"
-    script_name="${script_dir}/scripts/${name}"
-    curl https://raw.githubusercontent.com/iMissile/agri-iot-code/master/cron-scripts/${script_name} > ${script_name}
+    local_name="${script_dir}/scripts/${script_name}"
+    curl https://raw.githubusercontent.com/iMissile/agri-iot-code/master/cron-scripts/${script_name} > ${local_name}
+    echo "${script_name}"
     sudo chmod +x $script_name
 
 done

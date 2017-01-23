@@ -16,9 +16,8 @@ commandArgs <- function(trailingOnly=TRUE) c("D:/iwork.GH/agri-IoT/data/weather_
 
 
 
-args <- commandArgs(trailingOnly=TRUE)
+# args <- commandArgs(trailingOnly=TRUE)
 print(args)
-print(args[1])
 
 ifname <- args[1]
 
