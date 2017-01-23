@@ -17,7 +17,7 @@ done
 # дебаты насчет выявления пути размещения скрипта: http://stackoverflow.com/questions/59895/getting-the-source-directory-of-a-bash-script-from-within
 actual_path=$(readlink -f "${BASH_SOURCE[0]}")
 script_dir=$(dirname "$actual_path")
-log_file="${script_dir}/weather.log"
+log_file="${script_dir}/request_weather.log"
 # If you want to do it without following any symlinks, then try using realpath with option -s:
 # http://stackoverflow.com/questions/6643853/how-to-convert-in-path-names-to-absolute-name-in-a-bash-script
 data_file=$(realpath -sm "${script_dir}/../data/weather_history.txt")
