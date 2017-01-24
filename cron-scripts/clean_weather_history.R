@@ -18,6 +18,7 @@ args <- commandArgs(trailingOnly=TRUE)
 print(args)
 
 ifname <- args[1]
+# добавил строчку в RStudio Server
 
 
 parseWHistoryData <- function(wrecs) {
