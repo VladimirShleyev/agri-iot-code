@@ -51,11 +51,11 @@ cd $(dirname ${data_file})
 
 git add weather_history.txt
 git add weather_history.csv
-echo "Выполнена команда GIT ADD"
+# echo "Выполнена команда GIT ADD"
 
 cmessage="Добавлены данные о текущей погоде: $(date)"
 git commit -m "${cmessage}"
-echo "Выполнена команда GIT COMMIT"
+# echo "Выполнена команда GIT COMMIT"
 # git push --repo git@github.com:iot-rus/agri-iot-data.git
 git push
-echo "Выполнена команда GIT PUSH"
+# echo "Выполнена команда GIT PUSH"

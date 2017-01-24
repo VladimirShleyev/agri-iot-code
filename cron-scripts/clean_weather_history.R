@@ -10,19 +10,22 @@ library(futile.logger)
 library(digest)
 library(tools) # для работы с именами файлов
 
+# комадны flog.x дают NULL в консоль :(
 flog.appender(appender.console()) # будем выкидывать все в консоль
 flog.threshold(INFO)
 
 # To emulate the command line input I would use with Rscript, I entered this in RStudio:
 #commandArgs <- function(trailingOnly=TRUE) c("D:/iwork.GH/agri-IoT/data/weather_history.txt")
 args <- commandArgs(trailingOnly=TRUE)
-flog.info("Input params: ", args, capture=TRUE)
+# flog.info("Input params: ", args, capture=TRUE)
 
 # при проблемах с переданными параметрами нет смысла продолжать скрипт
 tryCatch(ifname <- args[1],
          error = function(c) {
            stop(c)
          })
+
+flog.info("Input params: %s", ifname)
 
 parseWHistoryData <- function(wrecs) {
   # преобразуем исторические данные по погоде из репозитория Гарика в человеческий csv--------------------------------------------------------
@@ -114,7 +117,7 @@ w_raw_data <- tibble(txt = tmp) %>%
 # перезаписываем исходный файл с устраненными дубликатами
 # к сожалению, есть небольшой дребезг со временем восхода\захода, из-за чего одинаковые измерения выглядят разными строчками
 write_lines(w_raw_data$txt, 
-           paste0(tools::file_path_sans_ext(ifname), "_mod.txt"), 
+           paste0(tools::file_path_sans_ext(ifname), ".txt"), #кидаем поверх существующего файла (было _mod.txt)
            append = FALSE)
 
 # передаем данные обратно на json парсинг
