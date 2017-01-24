@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "============== request started ================="
+
 ADC_01_LAT=55.765232
 ADC_01_LON=37.580322
 
@@ -20,7 +22,9 @@ script_dir=$(dirname "$actual_path")
 log_file="${script_dir}/request_weather.log"
 # If you want to do it without following any symlinks, then try using realpath with option -s:
 # http://stackoverflow.com/questions/6643853/how-to-convert-in-path-names-to-absolute-name-in-a-bash-script
-data_file=$(realpath -sm "${script_dir}/../data/weather_history.txt")
+# data_file=$(realpath -sm "${script_dir}/../../data/weather_history.txt")
+# установим абсолютный путь к репозиторию данных
+data_file="${HOME}/IoT/data/weather_history.txt"
 R_file=$(realpath -sm "${script_dir}/clean_weather_history.R")
 
 echo "log file name = " ${log_file}
@@ -33,23 +37,25 @@ cat $log_file | grep "coord" | grep -v failed > $data_file
 
 # А теперь вызываем R скрипт для очистки данных
 
-Rscript $R_file $data_file
+Rscript --verbose ${R_file} ${data_file}
 
 #Работа с GIT
 cd $(dirname ${data_file})
 
-git config user.name "iot-rus"
-git config user.email "ilya.tsas@gmail.com"
-git config credential.helper "cache --timeout=9999999"
+# git config user.name "iot-rus"
+# git config user.email "ilya.tsas@gmail.com"
+# git config credential.helper "cache --timeout=9999999"
 # New git push mode "simple" from  git v1.7.11 release notes
 # git config --global push.default simple
-echo "Запровижинены параметры GIT"
+# echo "Запровижинены параметры GIT"
 
 git add weather_history.txt
+git add weather_history.csv
 echo "Выполнена команда GIT ADD"
 
 cmessage="Добавлены данные о текущей погоде: $(date)"
 git commit -m "${cmessage}"
 echo "Выполнена команда GIT COMMIT"
-git push --repo git@github.com:iot-rus/agri-iot-data.git
+# git push --repo git@github.com:iot-rus/agri-iot-data.git
+git push
 echo "Выполнена команда GIT PUSH"

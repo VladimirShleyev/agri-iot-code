@@ -1,26 +1,28 @@
 rm(list=ls()) # очистим все переменные
-
-library(dplyr)
+#suppressPackageStartupMessages() # загасим сообщения, выдаваемые при загрузке файлов
+suppressPackageStartupMessages(library(dplyr))
 library(tibble)
 library(readr)
-library(purrr)
-library(curl)
-library(jsonlite)
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(curl))
+suppressPackageStartupMessages(library(jsonlite))
 library(futile.logger)
 library(digest)
 library(tools) # для работы с именами файлов
 
+flog.appender(appender.console()) # будем выкидывать все в консоль
+flog.threshold(INFO)
 
 # To emulate the command line input I would use with Rscript, I entered this in RStudio:
 #commandArgs <- function(trailingOnly=TRUE) c("D:/iwork.GH/agri-IoT/data/weather_history.txt")
 args <- commandArgs(trailingOnly=TRUE)
+flog.info("Input params: ", args, capture=TRUE)
 
-print(args)
-
-ifname <- args[1]
-# добавил строчку в RStudio Server
-
-
+# при проблемах с переданными параметрами нет смысла продолжать скрипт
+tryCatch(ifname <- args[1],
+         error = function(c) {
+           stop(c)
+         })
 
 parseWHistoryData <- function(wrecs) {
   # преобразуем исторические данные по погоде из репозитория Гарика в человеческий csv--------------------------------------------------------
@@ -56,7 +58,7 @@ parseWHistoryData <- function(wrecs) {
   res %>%
     mutate(human_temp = round(temp - 273.15, 1)) %>% # пересчитываем из кельвинов в градусы цельсия
     mutate(human_pressure = round(pressure * 0.75006375541921, 0)) %>% # пересчитываем из гектопаскалей (hPa) в мм рт. столба
-    select(human_time, timestamp, everything())
+    select(human_time, human_temp, human_pressure, everything())
 }
 
 # сначала открываем файл просто как набор строк. 
@@ -121,7 +123,9 @@ w_clean_data <- parseWHistoryData(paste0(w_raw_data$txt, collapse="\n")) %>%
   arrange(timestamp)
 
 # сохраняем распарсенный файл
-write_csv(w_clean_data, paste0(tools::file_path_sans_ext(ifname), ".csv"), na = "NA", append = FALSE, col_names = TRUE)
+csv_fname <- paste0(tools::file_path_sans_ext(ifname), ".csv")
+flog.info(paste0("Cleared file: ", csv_fname))
+write_csv(w_clean_data, csv_fname, na = "NA", append = FALSE, col_names = TRUE)
 
 
 
