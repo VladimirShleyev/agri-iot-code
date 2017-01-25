@@ -727,7 +727,7 @@ plotRealWeatherData <- function(weather_df, rain_df, timeframe) {
   # timeframe -- [POSIXct min, POSIXct max]
   # агрегат осадков за сутки
   # чтобы график нарисовался столбиками строго по дням, необходимо пропущенные дни добить нулями
-  dft <- data.frame(date = seq.Date(as.Date(timeframe[1]), as.Date(timeframe[2]), by = "1 day"),
+  dft <- tibble(date = seq.Date(as.Date(timeframe[1]), as.Date(timeframe[2]), by = "1 day"),
                     rain2 = 0)
   df2 <- dft %>%
     left_join(rain_df, by = "date") %>%
