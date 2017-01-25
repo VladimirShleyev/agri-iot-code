@@ -194,7 +194,7 @@ server <- function(input, output, session) {
     # может быть ситуация, когда нет данных от сенсоров. 
     # в этом случае попробуем растянуть данные до последней даты, когда видели показания
     # вперед ставим не 0, иначе округление будет до нижней даты, т.е. до 0:00 текущего дня
-    timeframe <- get_timeframe(days_back = as.numeric(input$historyDays),
+    timeframe <- getTimeframe(days_back = as.numeric(input$historyDays),
                                days_forward = ifelse(input$sync_graphs, as.numeric(input$predictDays), 0)) 
     
     flog.info(paste0("sensorts_plot timeframe: ", capture.output(str(timeframe))))
@@ -208,11 +208,11 @@ server <- function(input, output, session) {
     # browser() 
     if (is.na(rvars$weather.df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
       
-    timeframe = get_timeframe(days_back = as.numeric(input$historyDays),
+    timeframe = getTimeframe(days_back = as.numeric(input$historyDays),
                               days_forward = as.numeric(input$predictDays))
     
     flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
-    plot_real_weather2_data(rvars$weather.df, rvars$rain.df, timeframe)
+    plotRealWeatherData(rvars$weather.df, rvars$rain.df, timeframe)
   })
   
   output$data_tbl <- DT::renderDataTable({

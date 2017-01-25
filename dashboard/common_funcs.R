@@ -26,7 +26,7 @@ get_moisture_levels <- function() {
   levels
 }
 
-get_timeframe <- function(days_back = 7, days_forward = 3){
+getTimeframe <- function(days_back = 7, days_forward = 3){
   # если по каким-либо причинам наверху не определились с прогнозом (NA), 
   # то полагаем что он есть и он равен базовому горизонту
   days_formard <- ifelse(is.na(days_forward), 3, days_forward)
@@ -723,7 +723,7 @@ plot_github_ts4_data <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
   p # возвращаем ggplot
 }
 
-plot_real_weather2_data <- function(weather_df, rain_df, timeframe) {
+plotRealWeatherData <- function(weather_df, rain_df, timeframe) {
   # timeframe -- [POSIXct min, POSIXct max]
   # агрегат осадков за сутки
   # чтобы график нарисовался столбиками строго по дням, необходимо пропущенные дни добить нулями
