@@ -224,7 +224,7 @@ prepare_raw_weather_data <- function() {
 
 get_weather_df <- function(weather.df, back_days = 7, forward_days = 3) {
   # для устранения обращений к внешним источникам, теперь на вход 
-  # получаем предварительно скомпанованные предобработанные данные 
+  # получаем предварительно скомпонованные предобработанные данные 
   # weather.df <- prepare_raw_weather_data()
 
   # browser()
@@ -723,14 +723,14 @@ plot_github_ts4_data <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
   p # возвращаем ggplot
 }
 
-plot_real_weather2_data <- function(weather.df, rain.df, timeframe) {
+plot_real_weather2_data <- function(weather_df, rain_df, timeframe) {
   # timeframe -- [POSIXct min, POSIXct max]
   # агрегат осадков за сутки
   # чтобы график нарисовался столбиками строго по дням, необходимо пропущенные дни добить нулями
   dft <- data.frame(date = seq.Date(as.Date(timeframe[1]), as.Date(timeframe[2]), by = "1 day"),
                     rain2 = 0)
   df2 <- dft %>%
-    left_join(rain.df, by = "date") %>%
+    left_join(rain_df, by = "date") %>%
     mutate(rain = rain2 + ifelse(is.na(rain), 0, rain)) %>%
     select(date, rain) %>%
     mutate(timestamp = force_tz(with_tz(as.POSIXct(date), tz = "GMT"), tz = "Europe/Moscow")) %>%
@@ -738,7 +738,7 @@ plot_real_weather2_data <- function(weather.df, rain.df, timeframe) {
     filter(timestamp <= timeframe[2])
   
   # погода
-  df <- weather.df %>%
+  df <- weather_df %>%
     filter(timegroup >= timeframe[1]) %>%
     filter(timegroup <= timeframe[2])
 
