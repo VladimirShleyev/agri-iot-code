@@ -13,7 +13,7 @@ getwd()
 source("common_funcs.R") # сюда выносим все вычислительные и рисовательные функции
 
 
-prepareRawWeatherData <- function() {
+combineRawWeatherData <- function() {
   
   # получаем из гитхаба предобработанные исторические данные по погоде -----------------
   # пока мы не детализируем, как эти данные получены, пр€мой ли загрузкой, либо через фоновый git pull и открытие файла
@@ -66,7 +66,9 @@ prepareRawWeatherData <- function() {
   
   # объедин€ем и вычищаем --------------------------------------------------------
   
-  weather_df <- bind_rows(weather_hist, l3) %>%
+  weather_df <- weather_hist %>%
+    mutate(rain3h=NA) %>% # зимой дожд€ может не быть, а колонка нужна
+    bind_rows(l3) %>%
     select(-temp_max, -temp_min, -sea_level, -grnd_level) %>%
     distinct() %>% # удал€ем дубли, которые навыдавал API
     mutate(temp = round(temp - 273.15, 1)) %>% # пересчитываем из кельвинов в градусы цельси€
@@ -76,20 +78,51 @@ prepareRawWeatherData <- function() {
     mutate(timegroup = hgroup.enum(timestamp, time.bin = 1)) %>% # сделаем почасовую группировку
     # разметим данные на прошлое и будущее. будем использовать дл€ цветовой группировки
     mutate(time.pos = if_else(timestamp < now(), "PAST", "FUTURE"))
-  
-  
-  # weather_df['time.pos'] <- ifelse(weather_df$timestamp < now(), "PAST", "FUTURE")
-  
+
   weather_df
 }
 
-# без лишних заморочек загружаем исторические данные по погоде
-weather_hist <- 
-  safely(read_csv)("https://raw.githubusercontent.com/iot-rus/agri-iot-data/master/weather_history.csv") %>%
-  '[['("result")
+calcWeatherDF <- function(raw_weather, timeframe) {
+  # timeframe -- [POSIXct min, POSIXct max]
+  # дл€ устранени€ обращений к внешним источникам, теперь на вход 
+  # получаем предварительно скомпонованные предобработанные данные 
+  # raw_weather <- combineRawWeatherData()
+  
+  # browser()
+  # причешем данные дл€ графика у ѕаши + проведем усреднение по часовым группам
+  # есть нюансы, св€занные с выдачей данных из прогноза. 
+  # rain3h соотв. прогнозу осадков в мм, на предыдущих три часа
+  # за консистентность информации (нарезка тиков 3-х часовыми интервалами) отвечает API.
+  # поэтому что mean, что sum -- все одно. timegroup дл€ каждого прогнозного измерени€ должна быть ровно одна
+  res_DF <- raw_weather %>%
+    filter(timegroup >= timeframe[1]) %>%
+    filter(timegroup <= timeframe[2]) %>%
+    group_by(timegroup, time.pos) %>%
+    summarise(temp = mean(temp), 
+              pressure = mean(pressure), 
+              humidity = mean(humidity), 
+              rain3h_av = mean(rain3h)) %>%
+    ungroup
+  
+  # чтобы график не был разорванным, надо продублировать максимальную точку из PAST в группу FUTURE
+  POI_df <- res_DF %>%
+    filter(time.pos == 'PAST') %>%
+    filter(timegroup == max(timegroup)) %>%
+    mutate(time.pos = 'FUTURE')
+  
+  res_DF <- res_DF %>%
+    bind_rows(POI_df) %>%
+    arrange(timegroup)
+  
+  res_DF
+}
+
 
 timeframe <- getTimeframe()
-wd <- prepareRawWeatherData()
+raw_weather <- combineRawWeatherData()
+
+weather_DF <- calcWeatherDF(raw_weather, timeframe)
+
 #plotRealWeatherData(weather_hist, NULL, timeframe)
 
 
