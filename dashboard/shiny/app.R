@@ -17,13 +17,14 @@ library(magrittr)
 #library(leaflet)
 library(DT)
 library(ggplot2) #load first! (Wickham)
+library(reshape2)
 library(lubridate) #load second!
 library(scales)
 library(ggmap)
 library(dplyr)
 library(tidyr)
 library(readr)  #Hadley Wickham, http://blog.rstudio.org/2015/04/09/readr-0-1-0/
-library(reshape2)
+library(purrr)
 library(ggthemes)
 library(ggdendro) # для пустой темы
 library(wesanderson) # https://github.com/karthik/wesanderson
@@ -40,12 +41,13 @@ library(arules)
 library(futile.logger)
 library(Cairo)
 
-# на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
-tmp <- getwd()
-setwd("d:/iwork.GH/dvtiot")
-devtools::load_all()
-setwd(tmp)
-getwd()
+devtools::install_github("iMissile/dvtiot")
+## на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
+# tmp <- getwd()
+# setwd("d:/iwork.GH/dvtiot")
+# devtools::load_all()
+# setwd(tmp)
+# getwd()
 
 
 # library(rgl)
