@@ -26,18 +26,6 @@ get_moisture_levels <- function() {
   levels
 }
 
-getTimeframe <- function(days_back = 7, days_forward = 3){
-  # если по каким-либо причинам наверху не определились с прогнозом (NA), 
-  # то полагаем что он есть и он равен базовому горизонту
-  days_formard <- ifelse(is.na(days_forward), 3, days_forward)
-  min_lim <- floor_date(now() - days(days_back), unit = "day")
-  # поскольку будущее округляем вниз, то надо добавить еще сутки (+1)
-  max_lim <- ceiling_date(now() + days(days_forward), unit = "day") 
-  timeframe <- c(min_lim, max_lim)
-  
-  timeframe
-}
-  
 
 # http://stackoverflow.com/questions/20326946/how-to-put-ggplot2-ticks-labels-between-dollars
 my_date_format <- function(format = "%d %b", tz = "Europe/Moscow") {
@@ -74,38 +62,6 @@ my_date_format <- function(format = "%d %b", tz = "Europe/Moscow") {
     
     labels
   }
-}
-
-hgroup.enum0 <- function(date, time.bin = 4){
-  # привязываем все измерения, которые попали в промежуток +-1/2 интервала, к точке измерения. 
-  # точки измерения могут быть кратны 1, 2, 3, 4, 6, 12 часам, определяется time.bin
-  # отсчет измерений идет с 0:00
-  tick_time <- date + minutes(time.bin * 60)/2 # сдвигаем на пол интервала вперед
-  n <- floor(hour(tick_time) / time.bin)
-  floor_date(tick_time, unit = "day") + hours(n * time.bin)
-}
-
-hgroup.enum1 <- function(date, time.bin = 4){
-  # привязываем все измерения, которые попали в промежуток [0, t] к точке измерения. 
-  # точки измерения могут быть кратны 1, 2, 3, 4, 6, 12 часам, определяется time.bin
-  # отсчет измерений идет с 0:00
-  tick_time <- date
-  n <- floor(hour(tick_time) / time.bin)
-  floor_date(tick_time, unit = "day") + hours(n * time.bin)
-}
-
-hgroup.enum <- function(date, time.bin = 4){
-  # привязываем все измерения, которые попали в промежуток [0, t] к точке измерения. 
-  # точки измерения могут быть кратны 1, 2, 3, 4, 6, 12 часам, определяется time.bin
-  # отсчет измерений идет с 0:00
-  
-  # поправка для лаборатории. для группировки меньше часа допускается указывать числа меньше 1
-  # 0.5 -- раз в полчаса.0.25 -- раз в 15 минут
-  
-  tick_time <- date
-  if (time.bin < 1 & !(time.bin %in% c(0.25, 0.5))) time.bin = 1
-  n <- floor((hour(tick_time)*60 + minute(tick_time))/ (time.bin * 60))
-  floor_date(tick_time, unit = "day") + minutes(n * time.bin *60)
 }
 
 
@@ -723,66 +679,6 @@ plot_github_ts4_data <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
   p # возвращаем ggplot
 }
 
-plotRealWeatherData <- function(weather_df, rain_df, timeframe) {
-  # timeframe -- [POSIXct min, POSIXct max]
-  # агрегат осадков за сутки
-  # чтобы график нарисовался столбиками строго по дням, необходимо пропущенные дни добить нулями
-  dft <- tibble(date = seq.Date(as.Date(timeframe[1]), as.Date(timeframe[2]), by = "1 day"),
-                    rain2 = 0)
-  df2 <- dft %>%
-    left_join(rain_df, by = "date") %>%
-    mutate(rain = rain2 + ifelse(is.na(rain), 0, rain)) %>%
-    select(date, rain) %>%
-    mutate(timestamp = force_tz(with_tz(as.POSIXct(date), tz = "GMT"), tz = "Europe/Moscow")) %>%
-    filter(timestamp >= timeframe[1]) %>%
-    filter(timestamp <= timeframe[2])
-  
-  # погода
-  df <- weather_df %>%
-    filter(timegroup >= timeframe[1]) %>%
-    filter(timegroup <= timeframe[2])
-
-  lims <- timeframe
-  # схлопнем рисование графика
-  ## brewer.pal.info
-  # https://www.datacamp.com/community/tutorials/make-histogram-ggplot2
-  pp <- ggplot(df) +
-    # ggtitle("График температуры") +
-    # scale_fill_brewer(palette="Set1") +
-    # scale_fill_brewer(palette = "Paired") +
-    # geom_ribbon(aes(ymin = temp.min, ymax = temp.max, fill = time.pos), alpha = 0.5) +
-    # geom_point(shape = 1, size = 3) +
-    # geom_line(lwd = 1, linetype = 'dashed', color = "red") +
-    scale_x_datetime(labels = date_format("%d.%m", tz = "Europe/Moscow"), 
-                     breaks = date_breaks("1 days"), 
-                     #minor_breaks = date_breaks("6 hours"),
-                     limits = lims) +
-    theme_igray() +
-    theme(legend.position="none") +
-    geom_vline(xintercept = as.numeric(now()), linetype = "dotted", color = "yellowgreen", lwd = 1.1) +
-    xlab("Дата")
-  
-  p1 <- pp +
-    geom_line(aes(timegroup, temp, colour = time.pos), lwd = 1.2) +
-    scale_color_manual(values = brewer.pal(n = 9, name = "Oranges")[c(3, 7)]) +
-    ylab("Температура,\n град. C")
-  p2 <- pp +
-    geom_line(aes(timegroup, humidity, colour = time.pos), lwd = 1.2) +
-    scale_color_manual(values = brewer.pal(n = 9, name = "Blues")[c(4, 7)]) +
-    ylim(0, 100) +
-    ylab("Влажность\nвоздуха, %")
-  # по просьбе Игоря даем сдвижку к столбику + 12 часов для попадания столбика ровно в сутки
-  p3 <- pp + 
-    geom_bar(data = df2 %>% mutate(timestamp = timestamp + hours(12)), 
-             aes(timestamp, rain), fill = brewer.pal(n = 9, name = "Blues")[4], alpha = 0.5, stat="identity") +
-    ylim(0, NA) +
-    ylab("Осадки\n(дождь), мм")
-  
-  # grid.arrange(p1, p2, p3, ncol = 1) # возвращаем ggplot
-  grid.newpage()
-  grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), ggplotGrob(p3), size = "first"))
-  
-}
 
 prepare_sensors_mapdf <- function(input.df, slicetime) {
   df <- input.df %>%
