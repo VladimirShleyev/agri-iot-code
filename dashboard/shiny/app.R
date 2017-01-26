@@ -45,6 +45,7 @@ library(Cairo)
 flog.appender(appender.file('iot-dashboard.log'))
 flog.threshold(TRACE)
 flog.info("PoC dashboard started")
+getwd()
 
 # source("../common_funcs.R") # сюда выносим все вычислительные и рисовательные функции
 
@@ -126,8 +127,8 @@ server <- function(input, output, session) {
   
   rvars <- reactiveValues(raw_field.df = NA,
                           raw_weather.df = NA,
-                          weather.df = NA, 
-                          rain.df = NA)   # Anything that calls autoInvalidate will automatically invalidate every 5 seconds.
+                          weather_df = NA, 
+                          rain_df = NA)   # Anything that calls autoInvalidate will automatically invalidate every 5 seconds.
   # See:  http://shiny.rstudio.com/reference/shiny/latest/reactiveTimer.html
   # Also: http://rpackages.ianhowson.com/cran/shiny/man/reactiveTimer.html
   autoInvalidate <- reactiveTimer(1000 * 60, session) # раз в минуту
@@ -142,8 +143,8 @@ server <- function(input, output, session) {
     flog.info(capture.output(print(head(arrange(rvars$raw_field.df, desc(timestamp)), n = 10))))
     # flog.info("raw_github_field.df")
     # flog.info(capture.output(print(head(arrange(raw_github_field.df, desc(timestamp)), n = 10))))
-    flog.info("rvars$weather.df")
-    flog.info(capture.output(print(head(arrange(rvars$weather.df, desc(timestamp)), n = 10))))
+    flog.info("rvars$weather_df")
+    flog.info(capture.output(print(head(arrange(rvars$weather_df, desc(timestamp)), n = 10))))
   })
   
   observe({
@@ -155,11 +156,19 @@ server <- function(input, output, session) {
 
     # подгрузим и посчитаем данные по погоде
     # и только, если они хороши, то мы их обновляем для отображения
+    # при последующей аналитике и отображении используются небольшие массивы, 
+    # то мы принудительно обрежем данные [-30; +10] дней от текущей даты
+    timeframe <- getTimeframe(30, 10)
+    raw_weather <- gatherRawWeatherData()
+    
+    weather_df <- extractWeather(raw_weather, timeframe)
+    rain_df <- calcRainPerDate(raw_weather)
+    
     temp.df <- prepare_raw_weather_data()
     # NA[[1]] = NA
-    if (!is.na(temp.df)[[1]]) {
-      rvars$weather.df <- get_weather_df(temp.df)
-      rvars$rain.df <- calc_rain_per_date(temp.df)
+    if (!is.na(raw_weather)) {
+      rvars$weather_df <- get_weather_df(temp.df)
+      rvars$rain_df <- calc_rain_per_date(temp.df)
       # saveRDS(rain.df, "rain.df")
       }
 
@@ -206,13 +215,13 @@ server <- function(input, output, session) {
     # на выходе должен получиться ggplot!!!
     # параметры select передаются как character vector!!!!!!!!
     # browser() 
-    if (is.na(rvars$weather.df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
+    if (is.na(rvars$weather_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
       
     timeframe = getTimeframe(days_back = as.numeric(input$historyDays),
                               days_forward = as.numeric(input$predictDays))
     
     flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
-    plotRealWeatherData(rvars$weather.df, rvars$rain.df, timeframe)
+    plotRealWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
   })
   
   output$data_tbl <- DT::renderDataTable({
