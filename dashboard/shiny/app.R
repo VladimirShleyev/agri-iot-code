@@ -9,6 +9,8 @@
 # options(shiny.reactlog = TRUE)
 options(shiny.usecairo=TRUE)
 
+rm(list=ls()) # очистим все переменные
+
 library(shiny)
 library(shinythemes) # https://rstudio.github.io/shinythemes/
 library(magrittr)
@@ -37,6 +39,14 @@ library(jsonlite)
 library(arules)
 library(futile.logger)
 library(Cairo)
+
+# на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
+tmp <- getwd()
+setwd("d:/iwork.GH/dvtiot")
+devtools::load_all()
+setwd(tmp)
+getwd()
+
 
 # library(rgl)
 # настраиваем кастомный логгер
@@ -104,7 +114,7 @@ ui <- fluidPage(theme = shinytheme("united"), titlePanel("Контроль ор�
                   mainPanel(
                     fluidRow(
                              column(5, plotOutput('map_plot1')), # , height = "300px"
-                             column(7, plotOutput('temp_plot'))), # , height = "300px"
+                             column(7, plotOutput('temp_plot2'))), # , height = "300px"
                     fluidRow(
                              column(5, DT::dataTableOutput('data_tbl1')),
                              column(7, plotOutput('weather_plot'))),
@@ -159,16 +169,11 @@ server <- function(input, output, session) {
     # при последующей аналитике и отображении используются небольшие массивы, 
     # то мы принудительно обрежем данные [-30; +10] дней от текущей даты
     timeframe <- getTimeframe(30, 10)
+    
     raw_weather <- gatherRawWeatherData()
-    
-    weather_df <- extractWeather(raw_weather, timeframe)
-    rain_df <- calcRainPerDate(raw_weather)
-    
-    temp.df <- prepare_raw_weather_data()
-    # NA[[1]] = NA
     if (!is.na(raw_weather)) {
-      rvars$weather_df <- get_weather_df(temp.df)
-      rvars$rain_df <- calc_rain_per_date(temp.df)
+      rvars$weather_df <- extractWeather(raw_weather, timeframe)
+      rvars$rain_df <- calcRainPerDate(raw_weather)
       # saveRDS(rain.df, "rain.df")
       }
 
@@ -217,11 +222,12 @@ server <- function(input, output, session) {
     # browser() 
     if (is.na(rvars$weather_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
       
-    timeframe = getTimeframe(days_back = as.numeric(input$historyDays),
-                              days_forward = as.numeric(input$predictDays))
+    timeframe = getTimeframe(days_back=as.numeric(input$historyDays),
+                             days_forward=as.numeric(input$predictDays))
     
     flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
-    plotRealWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
+    gp <- plotWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
+    grid.draw(gp)
   })
   
   output$data_tbl <- DT::renderDataTable({
