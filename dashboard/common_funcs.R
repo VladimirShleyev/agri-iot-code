@@ -1,3 +1,69 @@
+plotWeatherData <- function(weather_df, rain_df, timeframe) {
+  # timeframe -- [POSIXct min, POSIXct max]
+  # агрегат осадков за сутки
+  # чтобы график нарисовался столбиками строго по дням, необходимо пропущенные дни добить нулями
+  dft <- tibble(date=seq.Date(as.Date(timeframe[1]), as.Date(timeframe[2]), by="1 day"))
+  
+  df2 <- dft %>%
+    left_join(rain_df, by="date") %>%
+    mutate(rain=if_else(is.na(rain), 0, rain)) %>%
+    select(date, rain) %>%
+    mutate(timestamp=force_tz(with_tz(as.POSIXct(date), tz="GMT"), tz="Europe/Moscow")) %>%
+    filter(timestamp>=timeframe[1]) %>%
+    filter(timestamp<=timeframe[2])
+  
+  # погода
+  df <- weather_df %>%
+    filter(timegroup>=timeframe[1]) %>%
+    filter(timegroup<=timeframe[2])
+  
+  lims <- timeframe
+  # схлопнем рисование графика
+  ## brewer.pal.info
+  # https://www.datacamp.com/community/tutorials/make-histogram-ggplot2
+  pp <- ggplot(df) +
+    # ggtitle("График температуры") +
+    # scale_fill_brewer(palette="Set1") +
+    # scale_fill_brewer(palette = "Paired") +
+    # geom_ribbon(aes(ymin = temp.min, ymax = temp.max, fill = time.pos), alpha = 0.5) +
+    # geom_point(shape = 1, size = 3) +
+    # geom_line(lwd = 1, linetype = 'dashed', color = "red") +
+    scale_x_datetime(labels=date_format("%d.%m", tz="Europe/Moscow"),
+                     breaks=date_breaks("1 days"),
+                     #minor_breaks = date_breaks("6 hours"),
+                     limits=lims) +
+    theme_igray() +
+    theme(legend.position="none",
+          axis.title.y=element_text(vjust=0)
+    ) +
+    geom_vline(xintercept=as.numeric(now()), linetype="dotted", color="yellowgreen", lwd=1.1) +
+    xlab("Дата")
+  
+  p1 <- pp +
+    geom_line(aes(timegroup, temp, colour=time.pos), lwd=1.2) +
+    scale_color_manual(values=brewer.pal(n=9, name="Oranges")[c(3, 7)]) +
+    ylab("Температура,\n град. C")
+  p2 <- pp +
+    geom_line(aes(timegroup, humidity, colour=time.pos), lwd=1.2) +
+    scale_color_manual(values=brewer.pal(n=9, name="Blues")[c(4, 7)]) +
+    ylim(0, 100) +
+    ylab("Влажность\nвоздуха, %")
+  # по просьбе Игоря даем сдвижку к столбику + 12 часов для попадания столбика ровно в сутки
+  p3 <- pp +
+    geom_bar(data=df2 %>% mutate(timestamp=timestamp + hours(12)),
+             aes(timestamp, rain), fill=brewer.pal(n=9, name="Blues")[4], alpha=0.5, stat="identity") +
+    ylim(0, NA) +
+    ylab("Осадки\n(дождь), мм")
+  
+  # grid.arrange(p1, p2, p3, ncol=1) # возвращаем ggplot
+  grid.newpage()
+  #grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), ggplotGrob(p3), size="first"))
+  rbind(ggplotGrob(p1), ggplotGrob(p2), ggplotGrob(p3), size="first")
+  
+}
+
+# пока не перенесенные в пакет ============================= 
+
 get_objects_size <- function() {
   # посмотрим занятые объемы памяти
   # http://isomorphism.es/post/92559575719/size-of-each-object-in-rs-workspace
@@ -63,205 +129,6 @@ my_date_format <- function(format = "%d %b", tz = "Europe/Moscow") {
     labels
   }
 }
-
-
-prepare_raw_weather_data <- function() {
-  # получаем исторические данные по погоде из репозитория Гарика --------------------------------------------------------
-  # https://cran.r-project.org/web/packages/curl/vignettes/intro.html
-  
-  # на выходе либо данные, либо NA в случае ошибки
-  
-  callingFun = as.list(sys.call(-1))[[1]]
-  calledFun = deparse(sys.call()) # as.list(sys.call())[[1]]  
-  
-  resp <- try({
-    curl_fetch_memory("https://raw.githubusercontent.com/iot-rus/Moscow-Lab/master/weather.txt")
-  })
-  
-  # проверим только 1-ый элемент класса, поскльку при разных ответах получается разное кол-во элементов
-  if(class(resp)[[1]] == "try-error" || resp$status_code != 200) {
-    # http://stackoverflow.com/questions/15595478/how-to-get-the-name-of-the-calling-function-inside-the-called-routine
-    flog.error(paste0("Error in ", calledFun, " called from ", callingFun, ". Class(resp) = ", class(resp)))
-    flog.error(paste0("resp = ", resp))
-    # в противном случае мы сигнализируем о невозможности обновить данные
-    return(NA)
-  }
-  
-  # дебажный вывод 
-  flog.debug(paste0("Debug info in ", calledFun, " called from ", callingFun, 
-                    ". Class(resp) = ", class(resp), ". Status_code = ", resp$status_code))
-  flog.debug(capture.output(str(resp)))
-  
-  # ответ есть, и он корректен. В этом случае осуществляем пребразование 
-  wrecs <- rawToChar(resp$content) # weather history
-  # wh_json <- gsub('\\\"', "'", txt, perl = TRUE) 
-  # заменим концы строк на , и добавим шапочку и окончание для формирования семантически правильного json
-  # последнюю ',' надо удалить, может такое встретиться (перевод строки)
-  tmp <- paste0('{"res":[', gsub("\\n", ",\n", wrecs, perl = TRUE), ']}')
-  wh_json <- gsub("},\n]}", "}]}", tmp)
-  # t <- cat(wh_json)
-  # write(wh_json, file="./export/wh_json.txt")
-  data <- fromJSON(wh_json)
-  
-  whist.df <- data$res$main
-  whist.df$timestamp <- data$res$dt
-  # поскольку историю мы сохраняем сами из данных текущих запросов, то
-  # rain$3h -- Rain volume for the last 3 hours (http://openweathermap.org/current#parameter)
-  whist.df$rain3h <- data$res$rain[['3h']]
-  whist.df$human_time <- as.POSIXct(whist.df$timestamp, origin='1970-01-01')
-  # browser()  
-  
-  # t0 <- '{"coord":{"lon":37.61,"lat":55.76},"weather":[{"id":800,"main":"Clear","description":"clear sky","icon":"01d"}],"base":"cmc stations","main":{"temp":291.77,"pressure":1012,"humidity":72,"temp_min":290.15,"temp_max":295.35},"wind":{"speed":4,"deg":340},"clouds":{"all":0},"dt":1464008912,"sys":{"type":1,"id":7323,"message":0.0031,"country":"RU","sunrise":1463965411,"sunset":1464025820},"id":524894,"name":"Moskva","cod":200}'
-  # t1 <- '{"coord":{"lon":37.61,"lat":55.76},"weather":[{"id":800,"main":"Clear","description":"clear sky","icon":"01d"}],"base":"stations","main":{"temp":291.01,"pressure":1012,"humidity":72,"temp_min":289.15,"temp_max":292.15},"visibility":10000,"wind":{"speed":4,"deg":330},"clouds":{"all":0},"dt":1464007798,"sys":{"type":1,"id":7323,"message":0.0354,"country":"RU","sunrise":1463965412,"sunset":1464025819},"id":524894,"name":"Moskva","cod":200}'
-  # t <- paste0('{"results":[', t0, ',', t1, ']}')
-  # mdata <- fromJSON(t)
-  
-  # head(wh_json)
-  
-  # получаем прогноз через API --------------------------------------------------------
-  url <- "api.openweathermap.org/data/2.5/"   
-  MoscowID <- '524901'
-  APPID <- '19deaa2837b6ae0e41e4a140329a1809'
-  # reqstring <- paste0(url, "weather?id=", MoscowID, "&APPID=", APPID)
-  reqstring <- paste0(url, "forecast?id=", MoscowID, "&APPID=", APPID) 
-  resp <-  try({
-    GET(reqstring)
-  })
-  
-  flog.debug("Calling api.openweathermap.org")
-                    
-  # проверим только 1-ый элемент класса, поскльку при разных ответах получается разное кол-во элементов
-  if(class(resp)[[1]] == "try-error" || resp$status_code != 200) {
-    # http://stackoverflow.com/questions/15595478/how-to-get-the-name-of-the-calling-function-inside-the-called-routine
-    flog.error(paste0("api.openweathermap error in ", calledFun, " called from ", callingFun, ". Class(resp) = ", class(resp)))
-    # в противном случае мы сигнализируем о невозможности обновить данные
-    return(NA)
-  }  
-
-  r <- content(resp)
-
-  # дебажный вывод 
-  flog.debug(paste0("Forecast in ", calledFun, " called from ", callingFun, ". Class(resp) = ", class(resp)))
-  flog.debug(capture.output(print(resp)))
-
-
-  # получаем погодные данные
-  m <- r$list
-  ll <- lapply(m, function(x){ 
-    ldate <- getElement(x, 'main')
-    ldate$timestamp <- getElement(x, 'dt')
-    # мм осадков за предыдущие 3 часа (Rain volume for last 3 hours, mm)
-    # http://openweathermap.org/forecast5#parameter
-    ldate$rain3h <- getElement(x, 'rain')[['3h']]
-    ldate
-  })
-  l2 <- melt(ll)
-  # нормализуем под колонки, которые есть в исторических данных
-  l3 <- tidyr::spread(l2, L2, value) %>% 
-    select(-L1, -temp_kf) %>%
-    mutate(timestamp = as.integer(timestamp))
-  
-  # объединяем и вычищаем --------------------------------------------------------
-  
-  weather.df <- bind_rows(whist.df, l3) %>%
-    select(-temp_max, -temp_min, -sea_level, -grnd_level) %>%
-    distinct() %>% # удаляем дубли, которые навыдавал API
-    mutate(temp = round(temp - 273.15, 1)) %>% # пересчитываем из кельвинов в градусы цельсия
-    mutate(pressure = round(pressure * 0.75006375541921, 0)) %>% # пересчитываем из гектопаскалей (hPa) в мм рт. столба
-    mutate(humidity = round(humidity, 0)) %>%
-    mutate(timestamp = as.POSIXct(timestamp, origin='1970-01-01')) %>%
-    mutate(timegroup = hgroup.enum(timestamp, time.bin = 1)) # сделаем почасовую группировку
-  
-  # разметим данные на прошлое и будущее. будем использовать для цветовой группировки
-  weather.df['time.pos'] <- ifelse(weather.df$timestamp < now(), "PAST", "FUTURE")
-
-  weather.df
-}
-
-get_weather_df <- function(weather.df, back_days = 7, forward_days = 3) {
-  # для устранения обращений к внешним источникам, теперь на вход 
-  # получаем предварительно скомпонованные предобработанные данные 
-  # weather.df <- prepare_raw_weather_data()
-
-  # browser()
-  # причешем данные для графика у Паши + проведем усреднение по часовым группам
-  # есть нюансы, связанные с выдачей данных из прогноза. 
-  # rain3h соотв. прогнозу осадков в мм, на предыдущих три часа
-  # за консистентность информации (нарезка тиков 3-х часовыми интервалами) отвечает API.
-  # поэтому что mean, что sum -- все одно. timegroup для каждого прогнозного измерения должна быть ровно одна
-  outw.df <- weather.df %>%
-    filter(timegroup >= floor_date(now() - days(back_days), unit = "day")) %>%
-    filter(timegroup <= ceiling_date(now() + days(forward_days), unit = "day")) %>%
-    group_by(timegroup, time.pos) %>%
-    summarise(temp = mean(temp), pressure = mean(pressure), humidity = mean(humidity), rain3h_av = mean(rain3h)) %>%
-    ungroup
-  
-  # чтобы график не был разорванным, надо продублировать максимальную точку из PAST в группу FUTURE
-  POI.df <- outw.df %>%
-    filter(time.pos == 'PAST') %>%
-    filter(timegroup == max(timegroup)) %>%
-    mutate(time.pos = 'FUTURE')
-  
-  outw.df <- outw.df %>%
-    bind_rows(POI.df) %>%
-    arrange(timegroup)
-  
-  outw.df
-}
-
-calc_rain_per_date <- function(weather.df) {
-  # считаем осадки за сутки ------------------------------
-  
-  # weather_df
-  # timestamp temp.min pressure humidity precipitation temp.max     temp           timegroup
-  #    (time)    (dbl)    (dbl)    (dbl)         (dbl)    (dbl)    (dbl)              (time)
-  # w.df <- prepare_raw_weather_data()
-  # if(is.null(w.df)){
-  #   flog.info("Error in rain recalulation")
-  # } else {
-  #   rain.df <- calc_rain_per_date(w.df)
-  
-  # }
-  # 
-  
-  
-  
-  # полагаем, что идентичность выпавших осадков с точностью до третьего знака просто означает дублирование показаний!!!!
-  dfw0 <- data.frame(timestamp = weather.df$timestamp, rain3h = weather.df$rain3h) %>%
-    filter(!is.na(rain3h)) %>% # записи без дождя нас вообще не интересуют
-    distinct() %>% # полностью дублирующиеся записи также неинтересны
-    # mutate(date = lubridate::date(timestamp)) %>%
-    mutate(date = as.Date(timestamp)) %>%
-    group_by(date, rain3h) %>% # собираем агрегаты по суткам, а потом по повторяющимся значениям, 
-    # может быть погрешность по переходам через сутки, но при группировке по значениям можем случайно объединить данных с разных дат
-    # в каждой группе посчитаем временную протяженность события
-    arrange(timestamp) %>%
-    mutate (dtime = as.numeric(difftime(timestamp, min(timestamp), unit = "min")))
-  
-  # теперь мы можем проверить, чтобы максимальное значение в группе не превышало 180 мин (3 часа)
-  # поглядел на данные, таких групп нет за месяц не нашел, решил пока для простоты забить
-  dfw1 <- dfw0 %>% 
-    # в каждой группе выберем значение с минимальным временем измерения
-    filter(timestamp == min(timestamp)) %>% # см. допущение об идентичности показаний
-    ungroup() %>%
-    arrange(timestamp)
-  
-  # а теперь посчитаем агрегаты по суткам
-  dfw2 <- dfw1 %>%
-    select(-dtime) %>%
-    group_by(date) %>%
-    summarise(rain = sum(rain3h)) %>% # пытаемся высчитать агрегат за сутки
-    ungroup %>%
-    #mutate(timegroup = as.numeric(as.POSIXct(date, origin='1970-01-01'))) %>%
-    mutate(timestamp.human = force_tz(with_tz(as.POSIXct(date), tz = "GMT"), tz = "Europe/Moscow")) %>%
-    mutate(timestamp = as.numeric(timestamp.human)) %>%
-    arrange(date)
-
-  flog.info("Rain calculation")
-  flog.info(capture.output(print(dfw2)))
-
-  dfw2
-  }
 
 load_field_data <- function() {
   ifile <- ".././data/appdata_field.csv"
@@ -437,27 +304,6 @@ get_github_field2_data <- function() {
 
 #    browser()
   df
-}
-
-load_weather_data <- function() {
-  ifile <- ".././data/appdata_weather.csv"
-  
-  raw.df <- read_delim(
-    ifile,
-    delim = ",",
-    quote = "\"",
-    col_names = TRUE,
-    locale = locale("ru", encoding = "windows-1251", tz = "Europe/Moscow"),
-    # таймзону, в принципе, можно установить здесь
-    # col_types = list(date = col_datetime(format = "%d.%m.%Y %H:%M")),
-    progress = interactive()
-  ) # http://barryrowlingson.github.io/hadleyverse/#5
-  
-  # сформируем часовые группы и посчитаем среднее по ансамблю сенсоров за каждую часовую группу
-  raw.df['timegroup'] <-
-    round_date(raw.df$timestamp, unit = "hour")
-  
-  raw.df # возвращаем загруженные данные
 }
 
 plot_github_ts3_data <- function(df, timeframe, tbin = 4) {
