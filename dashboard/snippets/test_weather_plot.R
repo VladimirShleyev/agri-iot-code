@@ -1,6 +1,5 @@
 rm(list=ls()) # очистим все переменные
 
-library(tidyverse)
 library(lubridate)
 library(ggplot2)
 library(scales)
@@ -8,6 +7,7 @@ library(ggthemes)
 # library(ggthemr)
 library(httr)
 library(reshape2)
+library(tidyverse)
 library(RColorBrewer)
 library(gtable)
 library(grid) # для grid.newpage()
