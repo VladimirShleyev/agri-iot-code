@@ -8,9 +8,9 @@ plotWeatherData <- function(weather_df, rain_df, timeframe) {
     left_join(rain_df, by="date") %>%
     mutate(rain=if_else(is.na(rain), 0, rain)) %>%
     select(date, rain) %>%
-    mutate(timestamp=force_tz(with_tz(as.POSIXct(date), tz="GMT"), tz="Europe/Moscow")) %>%
-    filter(timestamp>=timeframe[1]) %>%
-    filter(timestamp<=timeframe[2])
+    mutate(timegroup=force_tz(with_tz(as.POSIXct(date), tz="GMT"), tz="Europe/Moscow")) %>%
+    filter(timegroup>=timeframe[1]) %>%
+    filter(timegroup<=timeframe[2])
   
   # погода
   df <- weather_df %>%
@@ -37,23 +37,29 @@ plotWeatherData <- function(weather_df, rain_df, timeframe) {
           axis.title.y=element_text(vjust=0)
     ) +
     geom_vline(xintercept=as.numeric(now()), linetype="dotted", color="yellowgreen", lwd=1.1) +
+    # Если надпись надо отцентрировать: http://stackoverflow.com/questions/40675778/center-plot-title-in-ggplot2
+    theme(plot.title=element_text(size=rel(1.1), face="bold"),
+          axis.title.y=element_blank()) +
     xlab("Дата")
   
   p1 <- pp +
     geom_line(aes(timegroup, temp, colour=time.pos), lwd=1.2) +
     scale_color_manual(values=brewer.pal(n=9, name="Oranges")[c(3, 7)]) +
-    ylab("Температура,\n град. C")
+    ggtitle("Температура, град. C")
+    # ylab("Температура,\n град. C")
   p2 <- pp +
     geom_line(aes(timegroup, humidity, colour=time.pos), lwd=1.2) +
     scale_color_manual(values=brewer.pal(n=9, name="Blues")[c(4, 7)]) +
     ylim(0, 100) +
-    ylab("Влажность\nвоздуха, %")
+    ggtitle("Влажность воздуха, %")
   # по просьбе Игоря даем сдвижку к столбику + 12 часов для попадания столбика ровно в сутки
+
+    # если осадков вообще не предвидится, то принудительно ставим шкалу в диапазон [0, 1]
   p3 <- pp +
-    geom_bar(data=df2 %>% mutate(timestamp=timestamp + hours(12)),
-             aes(timestamp, rain), fill=brewer.pal(n=9, name="Blues")[4], alpha=0.5, stat="identity") +
-    ylim(0, NA) +
-    ylab("Осадки\n(дождь), мм")
+    geom_bar(data=df2 %>% mutate(timegroup=timegroup + hours(12)),
+             aes(timegroup, rain), fill=brewer.pal(n=9, name="Blues")[4], alpha=0.5, stat="identity") +
+    ylim(0, 1) + # if_else(max(.$rain)<0.1, 1, NA)) +
+    ggtitle("Осадки (дождь), мм")
   
   # grid.arrange(p1, p2, p3, ncol=1) # возвращаем ggplot
   grid.newpage()

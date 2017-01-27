@@ -14,6 +14,7 @@ library(grid) # для grid.newpage()
 library(gridExtra) # для grid.arrange()
 library(Cairo)
 library(futile.logger)
+library(profvis)
 
 # на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
 tmp <- getwd()
@@ -41,12 +42,13 @@ weather_df <- extractWeather(raw_weather, timeframe)
 rain_df <- calcRainPerDate(raw_weather)
 
 
-
+#profvis({
 gp <- plotWeatherData(weather_df, rain_df, timeframe)
+grid.draw(gp)
 
 png(filename="render_w_cairo.png", type="cairo", #pointsize=24, 
     units="cm", height=15, width=20, res=150, pointsize=8, antialias="default")
 grid.draw(gp)
 dev.off()
-grid.draw(gp)
+#})
 

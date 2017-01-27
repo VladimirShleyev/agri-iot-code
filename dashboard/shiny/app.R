@@ -41,7 +41,9 @@ library(arules)
 library(futile.logger)
 library(Cairo)
 
-devtools::install_github("iMissile/dvtiot")
+# devtools::install_github("iMissile/dvtiot")
+unloadNamespace("dvtiot") # выгружаем старый релиз
+library(dvtiot)
 ## на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
 # tmp <- getwd()
 # setwd("d:/iwork.GH/dvtiot")
@@ -65,6 +67,7 @@ getwd()
 # How to source() .R file saved using UTF-8 encoding?
 # http://stackoverflow.com/questions/5031630/how-to-source-r-file-saved-using-utf-8-encoding
 eval(parse("../common_funcs.R", encoding = "UTF-8"))
+# browser()
 
 # ================================================================
 ui <- fluidPage(theme = shinytheme("united"), titlePanel("Контроль орошения полей"),
