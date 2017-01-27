@@ -1,14 +1,6 @@
 # Single-file Shiny apps (http://shiny.rstudio.com/articles/single-file.html)
 # Обязательно в кодировке UTF-8
 
-# задаем фиксированный порт для shiny (http://shiny.rstudio.com/reference/shiny/latest/runApp.html)
-#options(shiny.host = "127.0.0.1")
-# options(shiny.port = 7775)
-# options(shiny.trace = TRUE)
-# options(shiny.error = browser)
-# options(shiny.reactlog = TRUE)
-options(shiny.usecairo=TRUE)
-
 rm(list=ls()) # очистим все переменные
 
 library(shiny)
@@ -51,6 +43,15 @@ library(dvtiot)
 # setwd(tmp)
 # getwd()
 
+# задаем фиксированный порт для shiny (http://shiny.rstudio.com/reference/shiny/latest/runApp.html)
+# options(shiny.host = "127.0.0.1")
+# options(shiny.port = 7775)
+# options(shiny.trace = TRUE)
+# options(shiny.error = browser)
+# options(shiny.reactlog = TRUE)
+options(shiny.usecairo=TRUE)
+
+
 
 # library(rgl)
 # настраиваем кастомный логгер
@@ -71,6 +72,7 @@ eval(parse("../common_funcs.R", encoding = "UTF-8"))
 
 # ================================================================
 ui <- fluidPage(theme = shinytheme("united"), titlePanel("Контроль орошения полей"),
+                shinythemes::themeSelector(),
                 sidebarLayout(
                   sidebarPanel(
                     radioButtons(
@@ -118,11 +120,8 @@ ui <- fluidPage(theme = shinytheme("united"), titlePanel("Контроль ор�
                   
                   mainPanel(
                     fluidRow(
-                             column(5, plotOutput('map_plot1')), # , height = "300px"
-                             column(7, plotOutput('temp_plot2'))), # , height = "300px"
-                    fluidRow(
-                             column(5, DT::dataTableOutput('data_tbl1')),
-                             column(7, plotOutput('weather_plot'))),
+                             column(8, plotOutput('weather_plot', height="800px")), # , height = "300px"
+                             column(4, plotOutput('temp_plot2'))), # , height = "300px"
                     width = 10 # обязательно ширины надо взаимно балансировать!!!!
                    )
                 ))

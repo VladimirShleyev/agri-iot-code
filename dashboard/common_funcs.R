@@ -531,7 +531,6 @@ plot_github_ts4_data <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
   p # возвращаем ggplot
 }
 
-
 prepare_sensors_mapdf <- function(input.df, slicetime) {
   df <- input.df %>%
     filter(timestamp <= slicetime) %>%
@@ -770,9 +769,10 @@ resizingTextGrob <- function(..., max.font.size = 40) {
   gr[['max.font.size']] <- max.font.size
   gr
 }
+
 drawDetails.resizingTextGrob <- function(x, recording = TRUE) { grid.draw(x$tg) }
-preDrawDetails.resizingTextGrob <- function(x)
-{
+
+preDrawDetails.resizingTextGrob <- function(x){
   h <- convertHeight(unit(1, "snpc"), "mm", valueOnly = TRUE)
   fs <- rescale(h, to = c(x$max.font.size, 7), from = c(50, 5))
   flog.info(paste0("h = ", h, ", fs = ", fs))
@@ -780,6 +780,7 @@ preDrawDetails.resizingTextGrob <- function(x)
   # pushViewport(viewport(gp = gpar(fontsize = fs, fontface = 'bold')))
   pushViewport(viewport(gp = gpar(fontsize = fs)))
 }
+
 postDrawDetails.resizingTextGrob <- function(x) { popViewport() }
 
 # ============================================================================
