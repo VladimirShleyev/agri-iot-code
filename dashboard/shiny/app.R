@@ -31,6 +31,7 @@ library(curl)
 library(httr)
 library(jsonlite)
 library(arules)
+library(htmltools)
 library(futile.logger)
 library(Cairo)
 
@@ -77,38 +78,41 @@ ui <-
   collapsible=TRUE,
   id="tsp",
   theme=shinytheme("flatly"),
-  shinythemes::themeSelector(),
+  # shinythemes::themeSelector(),
   tabPanel("Поле", value="field"),
   tabPanel("About", value="about"),
   
   # titlePanel("Контроль орошения полей"),
   # ----------------
-  conditionalPanel("input.tsp=='field'",
-                   fluidRow(
-                     column(4, h2("Контроль орошения полей"), h3("Консоль агронома")),
-                     column(8,
-                            fluidRow(
-                              column(4, selectInput("history_days", "Глубина истории (дни)", 
-                                                    choices = c(0, 1, 3, 5, 7), selected = 5)),
-                              column(4, selectInput("predict_days", "Горизонт прогноза (дни)",
-                                                    choices = c(1, 2, 3, 5), selected = 2)),
-                              column(4, selectInput("time_bin", "Период группировки (часы)",
-                                                    choices = c(0.5, 1, 2, 3, 4, 6, 12), selected = 1))
-                              ),
-                            fluidRow(
-                              column(4,checkboxInput(inputId = "sync_graphs",
-                                                     label = strong("Синхронизация на графиках оси X"),
-                                                     value = FALSE)),
-                              column(4, checkboxInput(inputId = "expand_y",
-                                                      label = strong("Расширить ось Y"),
-                                                      value = FALSE))
-                            ),
-                            fluidRow(
-                              column(8, plotOutput('temp_plot')), # , height = "300px"
-                              column(4, plotOutput('temp_plot2')) # , height = "300px"
-                            )
-                     )
-                   )  
+  conditionalPanel(
+    "input.tsp=='field'",
+    fluidRow(
+      column(6, h2("Контроль орошения полей"), h3(textOutput("cweather_text"))),
+      column(6,
+             fluidRow(
+               column(4, selectInput("history_days", "Глубина истории (дни)", 
+                                     choices = c(0, 1, 3, 5, 7), selected = 5)),
+               column(4, selectInput("predict_days", "Горизонт прогноза (дни)",
+                                     choices = c(1, 2, 3, 5), selected = 2)),
+               column(4, selectInput("time_bin", "Период группировки (часы)",
+                                     choices = c(0.5, 1, 2, 3, 4, 6, 12), selected = 1))
+               )
+             )
+      ),
+    
+    fluidRow(
+        column(6, plotOutput('temp_plot', height = "600px")), # 
+        column(6, plotOutput('weather_plot', height = "600px")) # , height = "300px"
+      ),
+    
+    fluidRow(
+      column(2,checkboxInput(inputId = "sync_graphs",
+                             label = strong("Прогноз влажности почвы"),
+                             value = TRUE)),
+      column(2, checkboxInput(inputId = "expand_y",
+                              label = strong("Расширить ось Y"),
+                              value = FALSE))
+    )    
   )
 )
 
@@ -181,7 +185,27 @@ server <- function(input, output, session) {
     plot_cweather()
     # plot_cweather_scaled()
   })
+
+  # текстовая сводка по текущей погоде
+  output$cweather_text <- renderText({
+    # на выходе должен получиться текст!!!
+    invalidateLater(1000 * 60) # обновляем в автономном режиме раз в N минут
+    
+    res <- ""
+    data <- getCurrentWeather()
+    if(!is.na(data)){
+      res <- sprintf("%s     %2.1f C, %d мм рт. ст., %d %%", 
+                     format(data$timestamp, "%e %b. %H:%M."), 
+                     data$temp, 
+                     data$pressure, 
+                     data$humidity)
+    }
+
+    res
+    #HTML(paste0("<pre>", res,"</pre>"))
+  })
   
+    
   output$temp_plot <- renderPlot({
     # invalidateLater(5000, session) # обновляем график раз в 5 секунд
     # flog.info(paste0(input$update_btn, ": temp_plot")) # формально используем
@@ -209,12 +233,13 @@ server <- function(input, output, session) {
     # на выходе должен получиться ggplot!!!
     # параметры select передаются как character vector!!!!!!!!
     # browser() 
-    if (is.na(rvars$weather_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
+    if (is.na(rvars$weather_df)) return(NA) # игнорируем первичную инициализацию или ошибки
       
-    timeframe = getTimeframe(days_back=as.numeric(input$history_days),
+    timeframe <- getTimeframe(days_back=as.numeric(input$history_days),
                              days_forward=as.numeric(input$predict_days))
     
-    flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
+    #flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
+    flog.info(paste0("weather_plot timeframe: ", timeframe))
     gp <- plotWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
     grid.draw(gp)
   })

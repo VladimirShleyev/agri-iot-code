@@ -32,11 +32,11 @@ plotWeatherData <- function(weather_df, rain_df, timeframe) {
                      breaks=date_breaks("1 days"),
                      #minor_breaks = date_breaks("6 hours"),
                      limits=lims) +
-    theme_igray() +
-    theme(legend.position="none",
-          axis.title.y=element_text(vjust=0)
-    ) +
-    geom_vline(xintercept=as.numeric(now()), linetype="dotted", color="yellowgreen", lwd=1.1) +
+    # theme_igray() +
+    theme_minimal() +
+    theme(legend.position="none", panel.grid.minor=element_blank(),
+          axis.title.y=element_text(vjust=0)) +
+    geom_vline(xintercept=as.numeric(now()), color="firebrick", lwd=1.1) +
     # Если надпись надо отцентрировать: http://stackoverflow.com/questions/40675778/center-plot-title-in-ggplot2
     theme(plot.title=element_text(size=rel(1.1), face="bold"),
           axis.title.y=element_blank()) +
@@ -161,7 +161,7 @@ plotSensorData <- function(df, timeframe, tbin=4, expand_y=FALSE) {
     # scale_x_datetime(labels=date_format(format="%d.%m%n%H:%M", tz="Europe/Moscow"),
     #                  breaks=date_breaks('4 hour')) +
     # текущуее время отобразим
-    geom_vline(xintercept=as.numeric(now()), linetype="dotted", color="yellowgreen", lwd=1.1)
+    geom_vline(xintercept=as.numeric(now()), color="firebrick", lwd=1.1)
   
   
   # в зависимости от диапазона отображения меняем параметры надписей оси x
@@ -385,15 +385,15 @@ get_github_field2_data <- function() {
   # расчитываем необходимые данные
   df <- temp.df %>%
     # линейная нормализация
-    mutate(value = yl + (yr-yl)/(xr-xl) * (measurement - xl), type = factor(type)) %>%
+    mutate(value=yl + (yr-yl)/(xr-xl) * (measurement - xl), type=factor(type)) %>%
     # получим временную метку
-    mutate(timestamp = ymd_hms(paste(date, time), truncated = 3, tz = "Europe/Moscow")) %>%
+    mutate(timestamp=ymd_hms(paste(date, time), truncated=3, tz="Europe/Moscow")) %>%
     # упростим имя сенсора
-    mutate(label = gsub(".*:", "", rawname, perl = TRUE)) %>%
+    mutate(label=gsub(".*:", "", rawname, perl = TRUE)) %>%
     # и разделим на имя и адрес
     separate(label, c('ipv6', 'name'), sep = '-', remove = TRUE) %>%
     select(timestamp, name, type, value, measurement, lat, lon, pin) %>%
-    mutate(location = "Moscow Lab") 
+    mutate(location="Moscow Lab") 
   
 
   # 2. постпроцессинг для разных типов датчиков  
@@ -460,7 +460,7 @@ plot_github_ts3_data <- function(df, timeframe, tbin = 4) {
     # scale_x_datetime(labels = date_format(format = "%d.%m%n%H:%M", tz = "Europe/Moscow"),
     #                  breaks = date_breaks('4 hour')) +
     # текщуее время отобразим
-    geom_vline(xintercept = as.numeric(now()), linetype = "dotted", color = "yellowgreen", lwd = 1.1) +
+    geom_vline(xintercept = as.numeric(now()), color = "firebrick", lwd = 1.1) +
     scale_x_datetime(labels = date_format("%d.%m", tz = "Europe/Moscow"),
                      breaks = date_breaks("1 days"), 
                      #minor_breaks = date_breaks("6 hours"),
