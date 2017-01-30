@@ -8,7 +8,10 @@ library(ggthemes)
 library(httr)
 library(reshape2)
 library(tidyverse)
+library(magrittr)
+library(arules)
 library(RColorBrewer)
+library(wesanderson)
 library(gtable)
 library(grid) # для grid.newpage()
 library(gridExtra) # для grid.arrange()
@@ -32,21 +35,14 @@ flog.appender(appender.file('iot-dashboard.log'))
 flog.threshold(TRACE)
 flog.info("plot started")
 
+#profvis({
+raw_field_df <- getSensorData()
+# сдвинем данные к настоящему моменту времени
+dshift <- now() - max(raw_field_df$timestamp)
+raw_field_df$timestamp <- raw_field_df$timestamp + dshift
+#})
 
 timeframe <- getTimeframe()
-raw_weather <- gatherRawWeatherData()
+plotSensorData(raw_field_df, timeframe, as.numeric(1), expand_y = TRUE)
 
-weather_df <- extractWeather(raw_weather, timeframe)
-rain_df <- calcRainPerDate(raw_weather)
-
-
-#profvis({
-gp <- plotWeatherData(weather_df, rain_df, timeframe)
-grid.draw(gp)
-
-png(filename="render_w_cairo.png", type="cairo", #pointsize=24, 
-    units="cm", height=15, width=20, res=150, pointsize=8, antialias="default")
-grid.draw(gp)
-dev.off()
-#})
 

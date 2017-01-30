@@ -68,6 +68,143 @@ plotWeatherData <- function(weather_df, rain_df, timeframe) {
   
 }
 
+plotSensorData <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
+  # рисуем новый вид графика после проведения калибровочных экспериментов
+  # timeframe -- [POSIXct min, POSIXct max]
+  
+  # Полагаем, что у нас всегда ненулевой горизонт прогноза
+  # т.о., если выбрано отсутствие синхронизации, то правая граница диапазона находится в конце текущего дня
+  force_rtime <- ifelse(difftime(timeframe[2], now(), unit = "min") > 24 * 60, FALSE, TRUE) 
+  
+  # Удалим все данные с NA. Из-за неполных данных возникают всякие косяки
+  # [filter for complete cases in data.frame using dplyr (case-wise deletion)](http://stackoverflow.com/questions/22353633/filter-for-complete-cases-in-data-frame-using-dplyr-case-wise-deletion)
+  # И сгруппируем по временным интервалам
+  raw.df <- df %>%
+    filter(complete.cases(.)) %>%
+    mutate(timegroup = hgroup.enum(timestamp, time.bin = tbin))
+  
+  # если нет синхронизации, то подгоним правый край до максимальной даты измерения
+  if (force_rtime) timeframe[2] <- max(raw.df$timegroup)
+  
+  flog.info(paste0("plot_github_ts4: force = ", force_rtime, 
+                   " timeframe: [", timeframe[1], ", ", timeframe[2], "]"))
+  
+  # фильтруем данные
+  raw.df <- raw.df %>%
+    filter(timegroup >= timeframe[1]) %>%
+    filter(timegroup <= timeframe[2])
+  
+  lims <- timeframe  
+  # проведем усреднение по временным группам, если измерения проводились несколько раз в течение этого времени
+  # усредняем только по рабочим датчикам
+  
+  avg.df <- raw.df %>%
+    filter(work.status) %>%
+    group_by(location, name, timegroup) %>%
+    summarise(value.mean = mean(value), value.sd = sd(value)) %>%
+    ungroup() # очистили группировки
+  
+  # готовим графическое представление ----------------------------------------
+  plot_palette <- brewer.pal(n = 5, name = "Blues")
+  plot_palette <- wes_palette(name = "Moonrise2") # https://github.com/karthik/wesanderson
+  
+  # levs <- list(step = c(1700, 2210, 2270, 2330, 2390, 2450, 2510), 
+  #             category = c('WET++', 'WET+', 'WET', 'NORM', 'DRY', 'DRY+', ''))
+  
+  levs <- getMoistureLevels()
+  if(!expand_y){
+    # рисуем график только по DRY+ -- WET+ значениям
+    # удаляем по первому значению, оно соотв. WET++. Списки несинхронизированные по длине!!
+    levs <- list(category = tail(levs$category, -1), 
+                 labels = tail(levs$labels, -1))
+  }
+  
+  # метки ставим ровно посерединке, расстояние высчитываем динамически
+  df.label <- data.frame(x = timeframe[1], 
+                         y = head(levs$category, -1) + diff(levs$category)/2, # посчитали разницу, уравновесили -1 элементом 
+                         text = levs$labels)
+  
+  # flog.debug("ts_plot: avg.df перед ggplot")
+  # 
+  if (nrow(avg.df) == 0) {
+    text <- "Empty avg.df in ts_plot"
+    flog.error(text)
+    warning(text)
+  }
+  
+  # http://www.cookbook-r.com/Graphs/Shapes_and_line_types/
+  p <- ggplot(avg.df, aes(x = timegroup, y = value.mean)) +
+    # http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually
+    scale_fill_brewer(palette="Dark2", direction = -1, guide = FALSE) +
+    scale_color_brewer(palette="Dark2", direction = -1, name = "Сенсор", guide = guide_legend(reverse = FALSE, fill = FALSE)) + 
+    
+    # scale_fill_manual(values = plot_palette, guide = FALSE) + # легенду по заполнению отключаем
+    # scale_color_manual(values = plot_palette, name = "Сенсор", guide = guide_legend(reverse = FALSE, fill = FALSE)) +
+    
+    #scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9")) +
+    # рисуем разрешенный диапазон
+    # geom_ribbon(aes(x = timegroup, ymin = 70, ymax = 90), linetype = 'blank', fill = "olivedrab3", alpha = 0.4) +
+    geom_ribbon(aes(x = timegroup, ymin = levs$category[levs$labels == 'NORM'], ymax = levs$category[levs$labels == 'DRY']), linetype = 'blank', 
+                fill = "olivedrab3", alpha = 0.4) +
+    geom_ribbon(
+      aes(ymin = value.mean - value.sd, ymax = value.mean + value.sd, fill = name),
+      alpha = 0.3
+    ) +
+    geom_line(aes(colour = name), alpha = 0.3, lwd = 1.2) +
+    # точки сырых данных
+    geom_point(data = raw.df, aes(x = timestamp, y = value, colour = name), shape = 1, size = 2) +
+    geom_point(aes(colour = name), alpha = 0.1, shape = 19, size = 3) + # усредненные точки
+    geom_hline(yintercept = levs$category, lwd = 1, linetype = 'dashed') +
+    # scale_x_datetime(labels = date_format(format = "%d.%m%n%H:%M", tz = "Europe/Moscow"),
+    #                  breaks = date_breaks('4 hour')) +
+    # текущуее время отобразим
+    geom_vline(xintercept = as.numeric(now()), linetype = "dotted", color = "yellowgreen", lwd = 1.1)
+  
+  
+  # в зависимости от диапазона отображения меняем параметры надписей оси x
+  # для суточных берем часовой интервал, для дневных -- сутки
+  if (difftime(timeframe[2], timeframe[1], unit = "min") < 24 * 60) {
+    p <- p +
+      scale_x_datetime(labels = date_format("%H:%M", tz = "Europe/Moscow"),
+                       breaks = date_breaks("1 hour"), 
+                       limits = lims)
+  } else {
+    p <- p +
+      scale_x_datetime(labels = date_format("%d.%m", tz = "Europe/Moscow"),
+                       breaks = date_breaks("1 days"), 
+                       minor_breaks = date_breaks("6 hours"),
+                       limits = lims)
+  }
+  
+  # minor_breaks = date_breaks('1 hour')
+  # добавляем нерабочие сенсоры
+  # geom_point(data = raw.df %>% filter(!work.status), aes(x = timegroup, y = value),
+  #            size = 3, shape = 21, stroke = 0, colour = 'red', fill = 'yellow') +
+  # geom_point(data = raw.df %>% filter(!work.status), aes(x = timegroup, y = value),
+  #            size = 3, shape = 13, stroke = 1.1, colour = 'red') +
+  p <- p +    
+    theme_igray() +
+    geom_label(data = df.label, aes(x = x, y = y, label = text)) +
+    # scale_colour_tableau("colorblind10", name = "Влажность\nпочвы") +
+    # scale_color_brewer(palette = "Set2", name = "Влажность\nпочвы") +
+    # ylim(0, 100) +
+    # scale_y_reverse(limits = c(head(levs$step, 1), tail(levs$step, 1))) +
+    scale_y_reverse(limits = c(tail(levs$category, 1), head(levs$category, 1))) +
+    xlab("Время и дата измерения") +
+    ylab("Влажность почвы") +
+    # theme_solarized() +
+    # scale_colour_solarized("blue") +
+    # theme(legend.position=c(0.5, .2)) +
+    theme(legend.position = "top") +
+    # theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 0.5)) +
+    # theme(axis.text.y = element_text(angle = 0)) +
+    # убрали заливку, см. stackoverflow.com/questions/21066077/remove-fill-around-legend-key-in-ggplot
+    guides(color = guide_legend(override.aes = list(fill = NA)))
+  
+  flog.info("Return from plot_github_ts4")
+  p # возвращаем ggplot
+}
+
 # пока не перенесенные в пакет ============================= 
 
 get_objects_size <- function() {
@@ -83,20 +220,7 @@ get_objects_size <- function() {
   mem.df
 }
 
-max_moisture_norm <- function() {
-  3300000
-  1000
-  } # нормировочный коэффициент для датчика влажности
 
-get_moisture_levels <- function() {
-  # определяем категории value, приведенных к диапазону [0; 100] с допущением 3.3 вольта в максимуме
-  # в терминах этой же нормировки на максимально возможные 3.3 вольта
-  levels <- list(category = c(2100, 2210, 2270, 2330, 2390, 2450, 2510) * 1000 / max_moisture_norm(),
-                 labels = c('WET++', 'WET+', 'WET', 'NORM', 'DRY', 'DRY+'))
-  # возвращаем асинхронные списки: граница, именование 
-  # порядок менять крайне не рекомендуется -- порядок следования явно используется в других функциях
-  levels
-}
 
 
 # http://stackoverflow.com/questions/20326946/how-to-put-ggplot2-ticks-labels-between-dollars
@@ -200,39 +324,6 @@ load_github_field_data <- function() {
     flog.error("GitHub connection error")
   }
 
-  df
-}
-
-postprocess_ts_field_data <- function(df){
-  # на вход получаем data.frame с временным рядом измерений
-  # проводим постпроцессинг по масштабированию измерений, их категоризации и пр.
-  
-  # 3. частный построцессинг  
-  # датчики влажности
-  levs <- get_moisture_levels()  
-  
-  # browser()
-  # пересчитываем value для датчиков влажности
-  df %<>%
-    # пока делаем нормировку к [0, 100] из диапазона 3.3 V грязным хаком
-    mutate(value = ifelse(type == 'MOISTURE', measurement / max_moisture_norm(), value)) %>%
-    # и вернем для влажности в value редуцированный вольтаж
-    # mutate(value  = ifelse(type == 'MOISTURE', measurement / 1000, value))
-    # откалибруем всплески
-    # кстати, надо подумать, возможно, что после перехода к категоризации, мы можем просто отсекать NA
-    mutate(work.status = (type == 'MOISTURE' &
-                            value >= head(levs$category, 1) &
-                            value <= tail(levs$category, 1)))
-  
-  # если колонки с категориями не было создано, то мы ее инициализируем
-  if(!('level' %in% names(df))) df$level <- NA
-  df %<>%
-    # считаем для всех, переносим потом только для тех, кого надо
-    # превращаем в character, иначе после переноса factor теряется, остаются только целые числа
-    mutate(marker = as.character(discretize(value, method = "fixed", categories = levs$category, labels = levs$labels))) %>%
-    mutate(level = ifelse(type == 'MOISTURE', marker, level)) %>%
-    select(-marker)
-  
   df
 }
 
@@ -394,142 +485,7 @@ plot_github_ts3_data <- function(df, timeframe, tbin = 4) {
   p # возвращаем ggplot
 }
 
-plot_github_ts4_data <- function(df, timeframe, tbin = 4, expand_y = FALSE) {
-  # рисуем новый вид графика после проведения калибровочных экспериментов
-  # timeframe -- [POSIXct min, POSIXct max]
-  
-  # Полагаем, что у нас всегда ненулевой горизонт прогноза
-  # т.о., если выбрано отсутствие синхронизации, то правая граница диапазона находится в конце текущего дня
-  force_rtime <- ifelse(difftime(timeframe[2], now(), unit = "min") > 24 * 60, FALSE, TRUE) 
 
-  # Удалим все данные с NA. Из-за неполных данных возникают всякие косяки
-  # [filter for complete cases in data.frame using dplyr (case-wise deletion)](http://stackoverflow.com/questions/22353633/filter-for-complete-cases-in-data-frame-using-dplyr-case-wise-deletion)
-  # И сгруппируем по временным интервалам
-  raw.df <- df %>%
-    filter(complete.cases(.)) %>%
-    mutate(timegroup = hgroup.enum(timestamp, time.bin = tbin))
-    
-  # если нет синхронизации, то подгоним правый край до максимальной даты измерения
-  if (force_rtime) timeframe[2] <- max(raw.df$timegroup)
-  
-  flog.info(paste0("plot_github_ts4: force = ", force_rtime, 
-                   " timeframe: [", timeframe[1], ", ", timeframe[2], "]"))
-  
-  # фильтруем данные
-  raw.df <- raw.df %>%
-    filter(timegroup >= timeframe[1]) %>%
-    filter(timegroup <= timeframe[2])
-  
-  lims <- timeframe  
-  # проведем усреднение по временным группам, если измерения проводились несколько раз в течение этого времени
-  # усредняем только по рабочим датчикам
-  
-  avg.df <- raw.df %>%
-    filter(work.status) %>%
-    group_by(location, name, timegroup) %>%
-    summarise(value.mean = mean(value), value.sd = sd(value)) %>%
-    ungroup() # очистили группировки
-  
-  # готовим графическое представление ----------------------------------------
-  plot_palette <- brewer.pal(n = 5, name = "Blues")
-  plot_palette <- wes_palette(name = "Moonrise2") # https://github.com/karthik/wesanderson
-  
-  # levs <- list(step = c(1700, 2210, 2270, 2330, 2390, 2450, 2510), 
-  #             category = c('WET++', 'WET+', 'WET', 'NORM', 'DRY', 'DRY+', ''))
-  
-  levs <- get_moisture_levels()
-  if(!expand_y){
-    # рисуем график только по DRY+ -- WET+ значениям
-    # удаляем по первому значению, оно соотв. WET++. Списки несинхронизированные по длине!!
-    levs <- list(category = tail(levs$category, -1), 
-                 labels = tail(levs$labels, -1))
-  }
-  
-  # метки ставим ровно посерединке, расстояние высчитываем динамически
-  df.label <- data.frame(x = timeframe[1], 
-                         y = head(levs$category, -1) + diff(levs$category)/2, # посчитали разницу, уравновесили -1 элементом 
-                         text = levs$labels)
-
-  # flog.debug("ts_plot: avg.df перед ggplot")
-  # 
-  if (nrow(avg.df) == 0) {
-    text <- "Empty avg.df in ts_plot"
-    flog.error(text)
-    warning(text)
-  }
-  
-  # http://www.cookbook-r.com/Graphs/Shapes_and_line_types/
-  p <- ggplot(avg.df, aes(x = timegroup, y = value.mean)) +
-    # http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually
-    scale_fill_brewer(palette="Dark2", direction = -1, guide = FALSE) +
-    scale_color_brewer(palette="Dark2", direction = -1, name = "Сенсор", guide = guide_legend(reverse = FALSE, fill = FALSE)) + 
-    
-    # scale_fill_manual(values = plot_palette, guide = FALSE) + # легенду по заполнению отключаем
-    # scale_color_manual(values = plot_palette, name = "Сенсор", guide = guide_legend(reverse = FALSE, fill = FALSE)) +
-    
-    #scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9")) +
-    # рисуем разрешенный диапазон
-    # geom_ribbon(aes(x = timegroup, ymin = 70, ymax = 90), linetype = 'blank', fill = "olivedrab3", alpha = 0.4) +
-    geom_ribbon(aes(x = timegroup, ymin = levs$category[levs$labels == 'NORM'], ymax = levs$category[levs$labels == 'DRY']), linetype = 'blank', 
-                fill = "olivedrab3", alpha = 0.4) +
-    geom_ribbon(
-      aes(ymin = value.mean - value.sd, ymax = value.mean + value.sd, fill = name),
-      alpha = 0.3
-    ) +
-    geom_line(aes(colour = name), alpha = 0.3, lwd = 1.2) +
-    # точки сырых данных
-    geom_point(data = raw.df, aes(x = timestamp, y = value, colour = name), shape = 1, size = 2) +
-    geom_point(aes(colour = name), alpha = 0.1, shape = 19, size = 3) + # усредненные точки
-    geom_hline(yintercept = levs$category, lwd = 1, linetype = 'dashed') +
-    # scale_x_datetime(labels = date_format(format = "%d.%m%n%H:%M", tz = "Europe/Moscow"),
-    #                  breaks = date_breaks('4 hour')) +
-    # текущуее время отобразим
-    geom_vline(xintercept = as.numeric(now()), linetype = "dotted", color = "yellowgreen", lwd = 1.1)
-    
-    
-  # в зависимости от диапазона отображения меняем параметры надписей оси x
-  # для суточных берем часовой интервал, для дневных -- сутки
-  if (difftime(timeframe[2], timeframe[1], unit = "min") < 24 * 60) {
-    p <- p +
-      scale_x_datetime(labels = date_format("%H:%M", tz = "Europe/Moscow"),
-                       breaks = date_breaks("1 hour"), 
-                       limits = lims)
-  } else {
-    p <- p +
-      scale_x_datetime(labels = date_format("%d.%m", tz = "Europe/Moscow"),
-                       breaks = date_breaks("1 days"), 
-                       minor_breaks = date_breaks("6 hours"),
-                       limits = lims)
-  }
-    
-    # minor_breaks = date_breaks('1 hour')
-    # добавляем нерабочие сенсоры
-    # geom_point(data = raw.df %>% filter(!work.status), aes(x = timegroup, y = value),
-    #            size = 3, shape = 21, stroke = 0, colour = 'red', fill = 'yellow') +
-    # geom_point(data = raw.df %>% filter(!work.status), aes(x = timegroup, y = value),
-    #            size = 3, shape = 13, stroke = 1.1, colour = 'red') +
-  p <- p +    
-    theme_igray() +
-    geom_label(data = df.label, aes(x = x, y = y, label = text)) +
-    # scale_colour_tableau("colorblind10", name = "Влажность\nпочвы") +
-    # scale_color_brewer(palette = "Set2", name = "Влажность\nпочвы") +
-    # ylim(0, 100) +
-    # scale_y_reverse(limits = c(head(levs$step, 1), tail(levs$step, 1))) +
-    scale_y_reverse(limits = c(tail(levs$category, 1), head(levs$category, 1))) +
-    xlab("Время и дата измерения") +
-    ylab("Влажность почвы") +
-    # theme_solarized() +
-    # scale_colour_solarized("blue") +
-    # theme(legend.position=c(0.5, .2)) +
-    theme(legend.position = "top") +
-    # theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 0.5)) +
-    # theme(axis.text.y = element_text(angle = 0)) +
-    # убрали заливку, см. stackoverflow.com/questions/21066077/remove-fill-around-legend-key-in-ggplot
-    guides(color = guide_legend(override.aes = list(fill = NA)))
-
-  flog.info("Return from plot_github_ts4")
-  p # возвращаем ggplot
-}
 
 prepare_sensors_mapdf <- function(input.df, slicetime) {
   df <- input.df %>%

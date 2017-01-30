@@ -5,6 +5,7 @@ rm(list=ls()) # очистим все переменные
 
 library(shiny)
 library(shinythemes) # https://rstudio.github.io/shinythemes/
+library(shinyBS)
 library(magrittr)
 #library(leaflet)
 library(DT)
@@ -52,7 +53,6 @@ library(dvtiot)
 options(shiny.usecairo=TRUE)
 
 
-
 # library(rgl)
 # настраиваем кастомный логгер
 # t <- paste0("iot_", format(now(), "%Y%m%d_%H%M%S"), ".log")
@@ -60,7 +60,7 @@ options(shiny.usecairo=TRUE)
 flog.appender(appender.file('iot-dashboard.log'))
 flog.threshold(TRACE)
 flog.info("PoC dashboard started")
-getwd()
+flog.info("Working directory is %s", getwd())
 
 # source("../common_funcs.R") # сюда выносим все вычислительные и рисовательные функции
 
@@ -71,76 +71,30 @@ eval(parse("../common_funcs.R", encoding = "UTF-8"))
 # browser()
 
 # ================================================================
-ui <- fluidPage(theme = shinytheme("united"), titlePanel("Контроль орошения полей"),
+ui <- fluidPage(theme = shinytheme("united"),
                 shinythemes::themeSelector(),
-                sidebarLayout(
-                  sidebarPanel(
-                    radioButtons(
-                      "objectInput",
-                      "Поле",
-                      choices = c("Картофель", "Капуста"),
-                      selected = "Картофель"
-                    ),
-                    strong("Время последнего обновления"),
-                    textOutput("time_updated"),
-                    p(),
-                    strong("Текущая погода"),
-                    plotOutput('cweather_plot', height = "200px"),
-                    p(),
-                    actionButton("update_btn", "Обновить данные сенсоров"),
-                    p(),
-                    strong("-------- Debug Zone --------"),
-                    checkboxInput(inputId = "sync_graphs",
-                                  label = strong("Синхронизация на графиках оси X"),
-                                  value = FALSE),
-                    checkboxInput(inputId = "expand_y",
-                                  label = strong("Расширить ось Y"),
-                                  value = FALSE),
-                    selectInput(
-                      "historyDays",
-                      "Глубина истории (дни)",
-                      choices = c(0, 1, 3, 5, 7),
-                      selected = 0
-                    ),
-                    selectInput(
-                      "predictDays",
-                      "Горизонт прогноза (дни)",
-                      choices = c(1, 2, 3, 5),
-                      selected = 2
-                    ),
-                    selectInput(
-                      "timeBin",
-                      "Период группировки (часы)",
-                      choices = c(0.5, 1, 2, 3, 4, 6, 12),
-                      selected = 0.5
-                    ),
-                    actionButton("logdata_btn", "Сброс данных в лог"),
-                    width = 2 # обязательно ширины надо взаимно балансировать!!!!
-                  ),
-                  
-                  mainPanel(
-                    fluidRow(
-                             column(8, plotOutput('weather_plot', height="800px")), # , height = "300px"
-                             column(4, plotOutput('temp_plot2'))), # , height = "300px"
-                    width = 10 # обязательно ширины надо взаимно балансировать!!!!
-                   )
-                ))
+                navbarPage(theme=shinytheme("simplex"),
+                           title=HTML('<div><a href="http://devoteam.com/"><img src="./img/devoteam_176px.png" width="80%"></a></div>'),
+                           tabPanel("Community Charts", value="commChart"),
+                           tabPanel("About", value="about"),
+                           # windowTitle="CC4L",
+                           collapsible=TRUE,
+                           id="tsp"),
+                titlePanel("Контроль орошения полей")
+                # ----------------
+                
+                )
 
 # ================================================================
 server <- function(input, output, session) {
   
   # создаем инстанс текущих данных
   # data.frame -- подмножество для анализа и отображения
-  # rvars <- reactiveValues(raw_field_df = get_github_field2_data(),
-  #                         raw_weather_df = prepare_raw_weather_data(),
-  #                         weather.df = get_weather_df(raw_weather_df), 
-  #                         rain.df = calc_rain_per_date(raw_weather_df)) 
   # по-хорошему, надо reactive values использовать немного по другому
   # см. https://cdn.rawgit.com/jcheng5/user2016-tutorial-shiny/master/slides.html Слайд с 1-м упражнением
   # Takeaway: Prefer using reactive expressions to model calculations, over using observers to set (reactive) variables.
   
-  rvars <- reactiveValues(raw_field_df = NA,
-                          raw_weather_df = NA,
+  rvars <- reactiveValues(field_df = NA,
                           weather_df = NA, 
                           rain_df = NA)   # Anything that calls autoInvalidate will automatically invalidate every 5 seconds.
   # See:  http://shiny.rstudio.com/reference/shiny/latest/reactiveTimer.html
@@ -153,12 +107,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$logdata_btn, {
     flog.info("Сброс глобальных данных")
-    flog.info("rvars$raw_field_df")
-    flog.info(capture.output(print(head(arrange(rvars$raw_field_df, desc(timestamp)), n = 10))))
-    # flog.info("raw_github_field.df")
-    # flog.info(capture.output(print(head(arrange(raw_github_field.df, desc(timestamp)), n = 10))))
-    flog.info("rvars$weather_df")
-    flog.info(capture.output(print(head(arrange(rvars$weather_df, desc(timestamp)), n = 10))))
+    flog.info("rvars$field_df")
   })
   
   observe({
@@ -168,8 +117,8 @@ server <- function(input, output, session) {
     # смотрим, требуется ли обновление данных
     flog.info(paste0("autoInvalidate. ", input$update_btn, " - ", Sys.time()))
 
-    # подгрузим и посчитаем данные по погоде
-    # и только, если они хороши, то мы их обновляем для отображения
+    # подгрузим и посчитаем данные по погоде и с датчиковт
+    # и только если по ходу не возникнет проблем, то мы их обновляем для отображения
     # при последующей аналитике и отображении используются небольшие массивы, 
     # то мы принудительно обрежем данные [-30; +10] дней от текущей даты
     timeframe <- getTimeframe(30, 10)
@@ -178,13 +127,14 @@ server <- function(input, output, session) {
     if (!is.na(raw_weather)) {
       rvars$weather_df <- extractWeather(raw_weather, timeframe)
       rvars$rain_df <- calcRainPerDate(raw_weather)
-      # saveRDS(rain.df, "rain.df")
       }
 
-    # берем лабораторные данные с github
-    temp.df <- get_github_field2_data()
-    # NA[[1]] = NA
-    if (!is.na(temp.df)[[1]]) { rvars$raw_field_df <- temp.df } # и только, если они хороши, то мы их обновляем для отображения
+    raw_field <- getSensorData()
+    if (!is.na(raw_field)) {
+      rvars$field_df <- raw_field %>%
+        filter(timestamp >= timeframe[1]) %>%
+        filter(timestamp <= timeframe[2])
+    }
     
     # принудительно меняем 
     # отобразили время последнего обновления
@@ -206,7 +156,7 @@ server <- function(input, output, session) {
     # flog.info(paste0(input$update_btn, ": temp_plot")) # формально используем
     # игнорируем update_btn, используем косвенное обновление, через reactiveValues
 
-    if (is.na(rvars$raw_field_df)[[1]]) rReturn(NULL) # игнорируем первичную инициализацию или ошибки
+    if (is.na(rvars$field_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
         
     # параметры select передаются как character vector!!!!!!!!
     # может быть ситуация, когда нет данных от сенсоров. 
@@ -215,9 +165,9 @@ server <- function(input, output, session) {
     timeframe <- getTimeframe(days_back = as.numeric(input$historyDays),
                                days_forward = ifelse(input$sync_graphs, as.numeric(input$predictDays), 0)) 
     
-    flog.info(paste0("sensorts_plot timeframe: ", capture.output(str(timeframe))))
+    # flog.info(paste0("sensorts_plot timeframe: ", capture.output(str(timeframe))))
     # на выходе должен получиться ggplot!!!
-    plot_github_ts4_data(rvars$raw_field_df, timeframe, as.numeric(input$timeBin), expand_y = input$expand_y)
+    plotSensorData(rvars$field_df, timeframe, as.numeric(input$timeBin), expand_y = input$expand_y)
   })
 
   output$weather_plot <- renderPlot({
@@ -235,7 +185,7 @@ server <- function(input, output, session) {
   })
   
   output$data_tbl <- DT::renderDataTable({
-    df <- rvars$raw_field_df %>% 
+    df <- rvars$field_df %>% 
       filter(type == 'MOISTURE') %>%
       select(name, measurement, work.status, timestamp, type) %>% 
       arrange(desc(timestamp))
@@ -253,13 +203,13 @@ server <- function(input, output, session) {
     
     slicetime <- now()
     #slicetime <- dmy_hm("29.04.2016 5:00", tz = "Europe/Moscow")
-    # input_df <- raw_field_df.old
-    input_df <- rvars$raw_field_df
+    # input_df <- field_df.old
+    input_df <- rvars$field_df
     
     sensors_df <- prepare_sensors_mapdf(input_df, slicetime)
     
     flog.info("sensors_df")
-    flog.info(capture.output(print(sensors_df)))
+    # flog.info(capture.output(print(sensors_df)))
     gm <- draw_field_ggmap(sensors_df, heatmap = FALSE)
     # benchplot(gm)
     gm
