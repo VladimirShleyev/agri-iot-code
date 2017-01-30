@@ -52,7 +52,6 @@ library(dvtiot)
 # options(shiny.reactlog = TRUE)
 options(shiny.usecairo=TRUE)
 
-
 # library(rgl)
 # настраиваем кастомный логгер
 # t <- paste0("iot_", format(now(), "%Y%m%d_%H%M%S"), ".log")
@@ -67,23 +66,51 @@ flog.info("Working directory is %s", getwd())
 # это вместо source
 # How to source() .R file saved using UTF-8 encoding?
 # http://stackoverflow.com/questions/5031630/how-to-source-r-file-saved-using-utf-8-encoding
-eval(parse("../common_funcs.R", encoding = "UTF-8"))
+eval(parse("../common_funcs.R", encoding="UTF-8"))
 # browser()
 
 # ================================================================
-ui <- fluidPage(theme = shinytheme("united"),
-                shinythemes::themeSelector(),
-                navbarPage(theme=shinytheme("simplex"),
-                           title=HTML('<div><a href="http://devoteam.com/"><img src="./img/devoteam_176px.png" width="80%"></a></div>'),
-                           tabPanel("Community Charts", value="commChart"),
-                           tabPanel("About", value="about"),
-                           # windowTitle="CC4L",
-                           collapsible=TRUE,
-                           id="tsp"),
-                titlePanel("Контроль орошения полей")
-                # ----------------
-                
-                )
+ui <- 
+  navbarPage("DVT IoT",
+  title=HTML('<div><a href="http://devoteam.com/"><img src="./img/devoteam_176px.png" width="80%"></a></div>'),
+  # windowTitle="CC4L",
+  collapsible=TRUE,
+  id="tsp",
+  theme=shinytheme("flatly"),
+  shinythemes::themeSelector(),
+  tabPanel("Поле", value="field"),
+  tabPanel("About", value="about"),
+  
+  # titlePanel("Контроль орошения полей"),
+  # ----------------
+  conditionalPanel("input.tsp=='field'",
+                   fluidRow(
+                     column(4, h2("Контроль орошения полей"), h3("Консоль агронома")),
+                     column(8,
+                            fluidRow(
+                              column(4, selectInput("history_days", "Глубина истории (дни)", 
+                                                    choices = c(0, 1, 3, 5, 7), selected = 5)),
+                              column(4, selectInput("predict_days", "Горизонт прогноза (дни)",
+                                                    choices = c(1, 2, 3, 5), selected = 2)),
+                              column(4, selectInput("time_bin", "Период группировки (часы)",
+                                                    choices = c(0.5, 1, 2, 3, 4, 6, 12), selected = 1))
+                              ),
+                            fluidRow(
+                              column(4,checkboxInput(inputId = "sync_graphs",
+                                                     label = strong("Синхронизация на графиках оси X"),
+                                                     value = FALSE)),
+                              column(4, checkboxInput(inputId = "expand_y",
+                                                      label = strong("Расширить ось Y"),
+                                                      value = FALSE))
+                            ),
+                            fluidRow(
+                              column(8, plotOutput('temp_plot')), # , height = "300px"
+                              column(4, plotOutput('temp_plot2')) # , height = "300px"
+                            )
+                     )
+                   )  
+  )
+)
 
 # ================================================================
 server <- function(input, output, session) {
@@ -131,7 +158,11 @@ server <- function(input, output, session) {
 
     raw_field <- getSensorData()
     if (!is.na(raw_field)) {
+      # сдвинем данные к настоящему моменту времени
+      dshift <- now() - max(raw_field$timestamp)
+      
       rvars$field_df <- raw_field %>%
+        mutate(timestamp=timestamp + dshift) %>%
         filter(timestamp >= timeframe[1]) %>%
         filter(timestamp <= timeframe[2])
     }
@@ -156,18 +187,22 @@ server <- function(input, output, session) {
     # flog.info(paste0(input$update_btn, ": temp_plot")) # формально используем
     # игнорируем update_btn, используем косвенное обновление, через reactiveValues
 
-    if (is.na(rvars$field_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
+    flog.info(paste0("temp_plot, filed_df: ", capture.output(str(rvars$field_df))))
+    
+    if (is.na(rvars$field_df)) return(NA) # игнорируем первичную инициализацию или ошибки
         
     # параметры select передаются как character vector!!!!!!!!
     # может быть ситуация, когда нет данных от сенсоров. 
     # в этом случае попробуем растянуть данные до последней даты, когда видели показания
     # вперед ставим не 0, иначе округление будет до нижней даты, т.е. до 0:00 текущего дня
-    timeframe <- getTimeframe(days_back = as.numeric(input$historyDays),
-                               days_forward = ifelse(input$sync_graphs, as.numeric(input$predictDays), 0)) 
+    timeframe <- getTimeframe(days_back=as.numeric(input$history_days),
+                              days_forward=ifelse(input$sync_graphs, as.numeric(input$predict_days), 0)) 
     
-    # flog.info(paste0("sensorts_plot timeframe: ", capture.output(str(timeframe))))
+    # flog.info(paste0("sensors_plot timeframe: ", capture.output(str(timeframe))))
+    flog.info(paste0("sensors_plot timeframe: ", timeframe))
     # на выходе должен получиться ggplot!!!
-    plotSensorData(rvars$field_df, timeframe, as.numeric(input$timeBin), expand_y = input$expand_y)
+
+    plotSensorData(rvars$field_df, timeframe, as.numeric(input$time_bin), expand_y=input$expand_y)
   })
 
   output$weather_plot <- renderPlot({
@@ -176,8 +211,8 @@ server <- function(input, output, session) {
     # browser() 
     if (is.na(rvars$weather_df)[[1]]) return(NULL) # игнорируем первичную инициализацию или ошибки
       
-    timeframe = getTimeframe(days_back=as.numeric(input$historyDays),
-                             days_forward=as.numeric(input$predictDays))
+    timeframe = getTimeframe(days_back=as.numeric(input$history_days),
+                             days_forward=as.numeric(input$predict_days))
     
     flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
     gp <- plotWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
