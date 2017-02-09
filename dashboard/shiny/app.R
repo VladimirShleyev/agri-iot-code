@@ -79,15 +79,23 @@ ui <-
   id="tsp",
   theme=shinytheme("flatly"),
   # shinythemes::themeSelector(),
+  
+  # includeCSS("styles.css"),
+  
   tabPanel("Поле", value="field"),
   tabPanel("About", value="about"),
+  
   
   # titlePanel("Контроль орошения полей"),
   # ----------------
   conditionalPanel(
     "input.tsp=='field'",
     fluidRow(
-      column(6, h2("Контроль орошения полей"), h3(textOutput("cweather_text"))),
+      column(6, h2("Контроль орошения полей"), 
+             #h3(textOutput("cweather_text", inline=TRUE), style="white-space:pre; padding:0px; margin:0px; margin-top:-61px")),
+             h3(textOutput("cweather_text", inline=TRUE))), #, style="white-space:pre; padding:0px; margin:0px;")),
+             #h3(tags$div(textOutput("cweather_text"), style="white-space:pre; padding:0px; margin:0px; margin-top:-61px"))),
+      tags$style(type='text/css', '#cweather_text {white-space:pre;}'), 
       column(6,
              fluidRow(
                column(4, selectInput("history_days", "Глубина истории (дни)", 
@@ -101,8 +109,8 @@ ui <-
       ),
     
     fluidRow(
-        column(6, plotOutput('temp_plot', height = "600px")), # 
-        column(6, plotOutput('weather_plot', height = "600px")) # , height = "300px"
+        column(6, plotOutput('temp_plot2', height = "600px")), # 
+        column(6, plotOutput('weather_plot2', height = "600px")) # , height = "300px"
       ),
     
     fluidRow(
@@ -131,6 +139,11 @@ server <- function(input, output, session) {
   # See:  http://shiny.rstudio.com/reference/shiny/latest/reactiveTimer.html
   # Also: http://rpackages.ianhowson.com/cran/shiny/man/reactiveTimer.html
   autoInvalidate <- reactiveTimer(1000 * 60, session) # раз в минуту
+  
+  cweather_df <- reactive({
+    invalidateLater(1000 * 60) # обновляем в автономном режиме раз в N минут
+    req(getCurrentWeather())
+  })  
 
 #  observe({
 #    rvars$should_update <- rvars$should_update + 1 # поставили флаг на обновление данных
@@ -186,21 +199,22 @@ server <- function(input, output, session) {
     # plot_cweather_scaled()
   })
 
+
+
   # текстовая сводка по текущей погоде
   output$cweather_text <- renderText({
     # на выходе должен получиться текст!!!
-    invalidateLater(1000 * 60) # обновляем в автономном режиме раз в N минут
+    data <- cweather_df() # reactive value
     
-    res <- ""
-    data <- getCurrentWeather()
-    if(!is.na(data)){
-      res <- sprintf("%s     %2.1f C, %d мм рт. ст., %d %%", 
-                     format(data$timestamp, "%e %b. %H:%M."), 
-                     data$temp, 
-                     data$pressure, 
-                     data$humidity)
-    }
+    res <- sprintf(
+      "%s:     %2.1f C, %d мм рт. ст., %d %%",
+      format(data$timestamp, "%e %b. %H:%M."),
+      data$temp,
+      data$pressure,
+      data$humidity
+    )
 
+    flog.info("Вывод текущей погоды")    
     res
     #HTML(paste0("<pre>", res,"</pre>"))
   })

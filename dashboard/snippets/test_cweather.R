@@ -36,6 +36,11 @@ res <- paste0(data$timestamp, ": ",
               data$humidity, " %")
 
 
-res <- sprintf("%s      %2.1f C, %d ìì ğò. ñò., %d %%", format(data$timestamp, "%e %b. %H:%M."), 
+# res <- sprintf("%s&nbsp;&nbsp;&nbsp;&nbsp;%2.1f C, %d ìì ğò. ñò., %d %%", format(data$timestamp, "%e %b. %H:%M."), 
+#                data$temp, data$pressure, data$humidity)
+
+res <- sprintf("%s   %2.1f C, %d ìì ğò. ñò., %d %%", format(data$timestamp, "%e %b. %H:%M."), 
                data$temp, data$pressure, data$humidity)
+
+res
 htmlPreserve(res)
