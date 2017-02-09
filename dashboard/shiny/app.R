@@ -91,11 +91,8 @@ ui <-
   conditionalPanel(
     "input.tsp=='field'",
     fluidRow(
-      column(6, h2("Контроль орошения полей"), 
-             #h3(textOutput("cweather_text", inline=TRUE), style="white-space:pre; padding:0px; margin:0px; margin-top:-61px")),
-             h3(textOutput("cweather_text", inline=TRUE))), #, style="white-space:pre; padding:0px; margin:0px;")),
-             #h3(tags$div(textOutput("cweather_text"), style="white-space:pre; padding:0px; margin:0px; margin-top:-61px"))),
       tags$style(type='text/css', '#cweather_text {white-space:pre;}'), 
+      column(6, h2("Контроль орошения полей"), h3(textOutput("cweather_text", inline=TRUE))),
       column(6,
              fluidRow(
                column(4, selectInput("history_days", "Глубина истории (дни)", 
@@ -109,8 +106,8 @@ ui <-
       ),
     
     fluidRow(
-        column(6, plotOutput('temp_plot2', height = "600px")), # 
-        column(6, plotOutput('weather_plot2', height = "600px")) # , height = "300px"
+        column(6, plotOutput('temp_plot', height = "600px")), # 
+        column(6, plotOutput('weather_plot', height = "600px")) # , height = "300px"
       ),
     
     fluidRow(
@@ -133,21 +130,51 @@ server <- function(input, output, session) {
   # см. https://cdn.rawgit.com/jcheng5/user2016-tutorial-shiny/master/slides.html Слайд с 1-м упражнением
   # Takeaway: Prefer using reactive expressions to model calculations, over using observers to set (reactive) variables.
   
-  rvars <- reactiveValues(field_df = NA,
-                          weather_df = NA, 
-                          rain_df = NA)   # Anything that calls autoInvalidate will automatically invalidate every 5 seconds.
   # See:  http://shiny.rstudio.com/reference/shiny/latest/reactiveTimer.html
   # Also: http://rpackages.ianhowson.com/cran/shiny/man/reactiveTimer.html
   autoInvalidate <- reactiveTimer(1000 * 60, session) # раз в минуту
   
   cweather_df <- reactive({
-    invalidateLater(1000 * 60) # обновляем в автономном режиме раз в N минут
+    # Invalidate and re-execute this reactive expression every time the timer fires.
+    autoInvalidate()
     req(getCurrentWeather())
   })  
 
-#  observe({
-#    rvars$should_update <- rvars$should_update + 1 # поставили флаг на обновление данных
-#  })
+
+  field_df <- reactive({
+    autoInvalidate()
+    raw_field <- req(getSensorData())
+    # специально завязали на кнопку
+    flog.info(paste0("field_df invalidated. ", input$update_btn, " - ", Sys.time()))    
+    
+    # сдвинем данные к настоящему моменту времени
+    dshift <- now() - max(raw_field$timestamp)
+    
+    # при последующей аналитике и отображении используются небольшие массивы, 
+    # поэтому мы принудительно обрежем данные [-30; +10] дней от текущей даты
+    timeframe <- getTimeframe(30, 10)
+    
+    raw_field %>%
+      mutate(timestamp = timestamp + dshift) %>%
+      filter(timestamp >= timeframe[1]) %>%
+      filter(timestamp <= timeframe[2])
+  })  
+  
+  raw_weather_df <- reactive({
+    autoInvalidate()
+    req(gatherRawWeatherData())
+  })  
+  
+  rain_df <- reactive({
+    calcRainPerDate(raw_weather_df())
+  })  
+
+  weather_df <- reactive({
+    # при последующей аналитике и отображении используются небольшие массивы, 
+    # поэтому мы принудительно обрежем данные [-30; +10] дней от текущей даты
+    timeframe <- getTimeframe(30, 10)
+    extractWeather(raw_weather_df(), timeframe)
+  })  
   
   observeEvent(input$logdata_btn, {
     flog.info("Сброс глобальных данных")
@@ -161,30 +188,6 @@ server <- function(input, output, session) {
     # смотрим, требуется ли обновление данных
     flog.info(paste0("autoInvalidate. ", input$update_btn, " - ", Sys.time()))
 
-    # подгрузим и посчитаем данные по погоде и с датчиковт
-    # и только если по ходу не возникнет проблем, то мы их обновляем для отображения
-    # при последующей аналитике и отображении используются небольшие массивы, 
-    # то мы принудительно обрежем данные [-30; +10] дней от текущей даты
-    timeframe <- getTimeframe(30, 10)
-    
-    raw_weather <- gatherRawWeatherData()
-    if (!is.na(raw_weather)) {
-      rvars$weather_df <- extractWeather(raw_weather, timeframe)
-      rvars$rain_df <- calcRainPerDate(raw_weather)
-      }
-
-    raw_field <- getSensorData()
-    if (!is.na(raw_field)) {
-      # сдвинем данные к настоящему моменту времени
-      dshift <- now() - max(raw_field$timestamp)
-      
-      rvars$field_df <- raw_field %>%
-        mutate(timestamp=timestamp + dshift) %>%
-        filter(timestamp >= timeframe[1]) %>%
-        filter(timestamp <= timeframe[2])
-    }
-    
-    # принудительно меняем 
     # отобразили время последнего обновления
     output$time_updated <- renderText({ 
       paste0(Sys.time())
@@ -199,36 +202,31 @@ server <- function(input, output, session) {
     # plot_cweather_scaled()
   })
 
-
-
   # текстовая сводка по текущей погоде
   output$cweather_text <- renderText({
     # на выходе должен получиться текст!!!
     data <- cweather_df() # reactive value
     
     res <- sprintf(
-      "%s:     %2.1f C, %d мм рт. ст., %d %%",
-      format(data$timestamp, "%e %b. %H:%M."),
+      "%s   >   %2.1f C, %d мм рт. ст., %d %%",
+      format(data$timestamp, "%e %b. %H:%M"),
       data$temp,
       data$pressure,
       data$humidity
     )
 
-    flog.info("Вывод текущей погоды")    
+    flog.info("cweather_text redraw")
     res
     #HTML(paste0("<pre>", res,"</pre>"))
   })
-  
-    
+
   output$temp_plot <- renderPlot({
     # invalidateLater(5000, session) # обновляем график раз в 5 секунд
     # flog.info(paste0(input$update_btn, ": temp_plot")) # формально используем
     # игнорируем update_btn, используем косвенное обновление, через reactiveValues
 
-    flog.info(paste0("temp_plot, filed_df: ", capture.output(str(rvars$field_df))))
+    # flog.info(paste0("temp_plot, filed_df: ", capture.output(str(field_df()))))
     
-    if (is.na(rvars$field_df)) return(NA) # игнорируем первичную инициализацию или ошибки
-        
     # параметры select передаются как character vector!!!!!!!!
     # может быть ситуация, когда нет данных от сенсоров. 
     # в этом случае попробуем растянуть данные до последней даты, когда видели показания
@@ -237,29 +235,29 @@ server <- function(input, output, session) {
                               days_forward=ifelse(input$sync_graphs, as.numeric(input$predict_days), 0)) 
     
     # flog.info(paste0("sensors_plot timeframe: ", capture.output(str(timeframe))))
-    flog.info(paste0("sensors_plot timeframe: ", timeframe))
+    flog.info(paste0("sensors_plot redraw. timeframe: ", timeframe))
     # на выходе должен получиться ggplot!!!
 
-    plotSensorData(rvars$field_df, timeframe, as.numeric(input$time_bin), expand_y=input$expand_y)
+    plotSensorData(field_df(), timeframe, as.numeric(input$time_bin), expand_y=input$expand_y)
   })
 
   output$weather_plot <- renderPlot({
     # на выходе должен получиться ggplot!!!
     # параметры select передаются как character vector!!!!!!!!
     # browser() 
-    if (is.na(rvars$weather_df)) return(NA) # игнорируем первичную инициализацию или ошибки
-      
+
     timeframe <- getTimeframe(days_back=as.numeric(input$history_days),
                              days_forward=as.numeric(input$predict_days))
     
     #flog.info(paste0("weather_plot timeframe: ", capture.output(str(timeframe))))
     flog.info(paste0("weather_plot timeframe: ", timeframe))
-    gp <- plotWeatherData(rvars$weather_df, rvars$rain_df, timeframe)
+    # browser()
+    gp <- plotWeatherData(req(weather_df()), req(rain_df()), timeframe)
     grid.draw(gp)
   })
   
   output$data_tbl <- DT::renderDataTable({
-    df <- rvars$field_df %>% 
+    df <- field_df() %>% 
       filter(type == 'MOISTURE') %>%
       select(name, measurement, work.status, timestamp, type) %>% 
       arrange(desc(timestamp))
@@ -278,7 +276,7 @@ server <- function(input, output, session) {
     slicetime <- now()
     #slicetime <- dmy_hm("29.04.2016 5:00", tz = "Europe/Moscow")
     # input_df <- field_df.old
-    input_df <- rvars$field_df
+    input_df <- field_df()
     
     sensors_df <- prepare_sensors_mapdf(input_df, slicetime)
     
