@@ -33,7 +33,7 @@ plotWeatherData <- function(weather_df, rain_df, timeframe) {
                      #minor_breaks = date_breaks("6 hours"),
                      limits=lims) +
     # theme_igray() +
-    theme_minimal() +
+    theme_minimal(base_size=18) +
     theme(legend.position="none", panel.grid.minor=element_blank(),
           axis.title.y=element_text(vjust=0)) +
     geom_vline(xintercept=as.numeric(now()), color="firebrick", lwd=1.1) +
@@ -189,7 +189,7 @@ plotSensorData <- function(df, timeframe, tbin=4, expand_y=FALSE) {
     theme_igray() +
     theme_solarized(light=FALSE) +
     theme_hc(bgcolor="darkunica") +
-    theme_minimal() +
+    theme_minimal(base_size=18) +
     theme(legend.position="top", panel.grid.minor=element_blank()) +
     geom_label(data=df.label, aes(x=x, y=y, label=text)) +
     # scale_colour_tableau("colorblind10", name="Влажность\nпочвы") +

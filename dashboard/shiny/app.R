@@ -99,15 +99,15 @@ ui <-
                                      choices = c(0, 1, 3, 5, 7), selected = 5)),
                column(4, selectInput("predict_days", "Горизонт прогноза (дни)",
                                      choices = c(1, 2, 3, 5), selected = 2)),
-               column(4, selectInput("time_bin", "Период группировки (часы)",
+               column(4, selectInput("time_bin", "Группировка (часы)",
                                      choices = c(0.5, 1, 2, 3, 4, 6, 12), selected = 1))
                )
              )
       ),
     
     fluidRow(
-        column(6, plotOutput('temp_plot', height = "600px")), # 
-        column(6, plotOutput('weather_plot', height = "600px")) # , height = "300px"
+        column(6, plotOutput('temp_plot', height = "400px")), # 
+        column(6, plotOutput('weather_plot', height = "400px")) # , height = "300px"
       ),
     
     fluidRow(
@@ -221,13 +221,7 @@ server <- function(input, output, session) {
   })
 
   output$temp_plot <- renderPlot({
-    # invalidateLater(5000, session) # обновляем график раз в 5 секунд
-    # flog.info(paste0(input$update_btn, ": temp_plot")) # формально используем
-    # игнорируем update_btn, используем косвенное обновление, через reactiveValues
 
-    # flog.info(paste0("temp_plot, filed_df: ", capture.output(str(field_df()))))
-    
-    # параметры select передаются как character vector!!!!!!!!
     # может быть ситуация, когда нет данных от сенсоров. 
     # в этом случае попробуем растянуть данные до последней даты, когда видели показания
     # вперед ставим не 0, иначе округление будет до нижней даты, т.е. до 0:00 текущего дня
@@ -237,15 +231,11 @@ server <- function(input, output, session) {
     # flog.info(paste0("sensors_plot timeframe: ", capture.output(str(timeframe))))
     flog.info(paste0("sensors_plot redraw. timeframe: ", timeframe))
     # на выходе должен получиться ggplot!!!
-
     plotSensorData(field_df(), timeframe, as.numeric(input$time_bin), expand_y=input$expand_y)
   })
 
   output$weather_plot <- renderPlot({
     # на выходе должен получиться ggplot!!!
-    # параметры select передаются как character vector!!!!!!!!
-    # browser() 
-
     timeframe <- getTimeframe(days_back=as.numeric(input$history_days),
                              days_forward=as.numeric(input$predict_days))
     
