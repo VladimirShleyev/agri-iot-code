@@ -34,6 +34,7 @@ library(arules)
 library(htmltools)
 library(futile.logger)
 library(Cairo)
+library(hrbrthemes)
 
 # devtools::install_github("iMissile/dvtiot")
 unloadNamespace("dvtiot") # выгружаем старый релиз
@@ -106,8 +107,8 @@ ui <-
       ),
     
     fluidRow(
-        column(6, plotOutput('temp_plot', height = "400px")), # 
-        column(6, plotOutput('weather_plot', height = "400px")) # , height = "300px"
+        column(6, plotOutput('temp_plot', height = "600px")), # 
+        column(6, plotOutput('weather_plot', height = "600px")) # , height = "300px"
       ),
     
     fluidRow(

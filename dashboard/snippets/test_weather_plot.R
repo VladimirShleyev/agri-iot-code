@@ -15,6 +15,7 @@ library(gridExtra) # для grid.arrange()
 library(Cairo)
 library(futile.logger)
 library(profvis)
+library(hrbrthemes)
 
 # на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
 tmp <- getwd()
@@ -50,3 +51,4 @@ grid.draw(gp)
 dev.off()
 #})
 
+grid.draw(gp)

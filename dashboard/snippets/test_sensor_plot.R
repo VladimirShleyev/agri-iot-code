@@ -17,6 +17,7 @@ library(grid) # для grid.newpage()
 library(gridExtra) # для grid.arrange()
 library(Cairo)
 library(futile.logger)
+library(hrbrthemes)
 library(profvis)
 
 # на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
