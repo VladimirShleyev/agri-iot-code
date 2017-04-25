@@ -3,6 +3,9 @@
 
 rm(list=ls()) # очистим все переменные
 
+# https://www.r-statistics.com/2012/04/speed-up-your-r-code-using-a-just-in-time-jit-compiler/
+#library(compiler)
+#enableJIT(3)
 library(shiny)
 library(shinythemes) # https://rstudio.github.io/shinythemes/
 library(shinyBS)
@@ -35,9 +38,10 @@ library(htmltools)
 library(futile.logger)
 library(Cairo)
 library(hrbrthemes)
+# packrat::opts$ignored.packages("iMissile/dvtiot")
 
 # devtools::install_github("iMissile/dvtiot")
-unloadNamespace("dvtiot") # выгружаем старый релиз
+# unloadNamespace("dvtiot") # выгружаем старый релиз
 library(dvtiot)
 ## на этапе отладки каждый раз перегружаем пакет, который отдельно дорабатывается.
 # tmp <- getwd()
